@@ -1,12 +1,15 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 
 export async function GET(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return NextResponse.json({ message: 'Skip during build' });
+    }
     const { userId } = await auth();
 
     if (!userId) {
@@ -20,6 +23,7 @@ export async function GET(
     console.log(`   User: ${userId}`);
 
     // Get document from database
+    const supabaseAdmin = createAdminClient();
     const { data: document, error } = await supabaseAdmin
       .from('documents')
       .select('*')
@@ -85,6 +89,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
     const { userId } = await auth();
 
     if (!userId) {
@@ -94,6 +101,7 @@ export async function DELETE(
     const documentId = params.id;
 
     // Get document
+    const supabaseAdmin = createAdminClient();
     const { data: document, error: fetchError } = await supabaseAdmin
       .from('documents')
       .select('*')

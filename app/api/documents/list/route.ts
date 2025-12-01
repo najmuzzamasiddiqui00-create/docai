@@ -1,8 +1,11 @@
 import { auth } from '@clerk/nextjs/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 
 export async function GET() {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
     const { userId } = await auth();
 
     if (!userId) {
@@ -10,6 +13,7 @@ export async function GET() {
     }
 
     // Get all documents for the user
+    const supabaseAdmin = createAdminClient();
     const { data: documents, error } = await supabaseAdmin
       .from('documents')
       .select(`

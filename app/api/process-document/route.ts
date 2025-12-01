@@ -1,7 +1,7 @@
 // Internal Document Processing Route
 // NO Edge Functions, NO n8n - Pure Next.js backend processing
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 import { extractText } from '@/lib/text-extractor';
 import { analyzeTextWithGemini } from '@/lib/gemini';
 
@@ -12,6 +12,9 @@ export async function POST(req: NextRequest) {
   let documentId: string | null = null;
 
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return NextResponse.json({ message: 'Skip during build' });
+    }
     // Parse request body
     const body = await req.json();
     documentId = body.documentId;
@@ -29,6 +32,7 @@ export async function POST(req: NextRequest) {
     // ===== STEP 1: Get document from database =====
     console.log('\n📝 Step 1: Fetching document from database...');
     
+    const supabaseAdmin = createAdminClient();
     const { data: document, error: fetchError } = await supabaseAdmin
       .from('documents')
       .select('*')
@@ -180,6 +184,7 @@ export async function POST(req: NextRequest) {
     if (documentId) {
       console.log('\n🔄 Updating document status to failed...');
       try {
+        const supabaseAdmin = createAdminClient();
         await supabaseAdmin
           .from('documents')
           .update({

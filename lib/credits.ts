@@ -1,4 +1,4 @@
-import { supabaseAdmin } from './supabase';
+import { createAdminClient } from './supabase';
 
 // Credit system constants
 export const FREE_CREDIT_LIMIT = 5;
@@ -27,6 +27,7 @@ export interface CreditCheckResult {
  */
 export async function checkUserCredits(clerkUserId: string): Promise<CreditCheckResult> {
   try {
+    const supabaseAdmin = createAdminClient();
     // Fetch user profile from database (server-side only)
     const { data: user, error } = await supabaseAdmin
       .from('user_profiles')
@@ -106,6 +107,7 @@ export async function checkUserCredits(clerkUserId: string): Promise<CreditCheck
  */
 export async function incrementCreditUsage(clerkUserId: string): Promise<void> {
   try {
+    const supabaseAdmin = createAdminClient();
     // Fetch current user data
     const { data: user, error: fetchError } = await supabaseAdmin
       .from('user_profiles')
@@ -156,6 +158,7 @@ export async function createUserProfile(
   fullName?: string
 ): Promise<void> {
   try {
+    const supabaseAdmin = createAdminClient();
     const { error } = await supabaseAdmin
       .from('user_profiles')
       .insert({
@@ -188,6 +191,7 @@ export async function activateSubscription(
   plan: 'pro' | 'premium'
 ): Promise<void> {
   try {
+    const supabaseAdmin = createAdminClient();
     const { error } = await supabaseAdmin
       .from('user_profiles')
       .update({

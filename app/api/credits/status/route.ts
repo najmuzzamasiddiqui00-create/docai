@@ -3,6 +3,9 @@ import { getUserCreditStatus } from '@/lib/credits';
 
 export async function GET() {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
     const { userId } = await auth();
 
     if (!userId) {
@@ -13,7 +16,9 @@ export async function GET() {
 
     return Response.json(creditStatus);
   } catch (error: any) {
-    console.error('Credit status error:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Credit status error:', error);
+    }
     return Response.json(
       { error: 'Failed to fetch credit status' },
       { status: 500 }
