@@ -1,9 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
-import { supabaseAdmin } from './supabase';
+import { createAdminClient } from './supabase';
 import { Subscription } from '@/types';
 
 export async function getUserSubscription(userId: string): Promise<Subscription | null> {
-  const { data, error } = await supabaseAdmin
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
     .from('subscriptions')
     .select('*')
     .eq('user_id', userId)
@@ -35,7 +36,8 @@ export async function checkSubscriptionStatus(userId: string): Promise<{
   // Check if subscription is expired
   if (subscription.end_date && new Date(subscription.end_date) < new Date()) {
     // Update subscription status to expired
-    await supabaseAdmin
+    const supabase = createAdminClient();
+    await supabase
       .from('subscriptions')
       .update({ status: 'expired' })
       .eq('id', subscription.id);

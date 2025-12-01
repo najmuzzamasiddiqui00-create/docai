@@ -3,6 +3,10 @@ import { checkSubscriptionStatus } from '@/lib/subscription';
 
 export async function GET() {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
+
     const { userId } = await auth();
 
     if (!userId) {

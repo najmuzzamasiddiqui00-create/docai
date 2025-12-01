@@ -218,7 +218,8 @@ export async function activateSubscription(
  */
 export async function getUserCreditStatus(clerkUserId: string) {
   try {
-    const { data: user, error } = await supabaseAdmin
+    const supabase = createAdminClient();
+    const { data: user, error } = await supabase
       .from('user_profiles')
       .select('free_credits_used, plan, subscription_status')
       .eq('clerk_user_id', clerkUserId)
