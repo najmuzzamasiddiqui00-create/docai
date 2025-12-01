@@ -1,9 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
 import { verifyRazorpaySignature } from '@/lib/razorpay';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 
 export async function POST(req: Request) {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
+
     const { userId } = await auth();
 
     if (!userId) {
@@ -24,8 +28,9 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Invalid payment signature' }, { status: 400 });
     }
 
+    const supabase = createAdminClient();
     // Update subscription status
-    const { data: subscription } = await supabaseAdmin
+    const { data: subscription } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('razorpay_order_id', razorpay_order_id)
@@ -36,7 +41,7 @@ export async function POST(req: Request) {
     }
 
     // Activate subscription
-    await supabaseAdmin
+    await supabase
       .from('subscriptions')
       .update({
         status: 'active',

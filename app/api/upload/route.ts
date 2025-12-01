@@ -1,5 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 import { checkUserCredits, incrementCreditUsage } from '@/lib/credits';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -34,6 +34,10 @@ export async function POST(req: Request) {
   const startTime = Date.now();
   
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
+
     console.log('\n🚀 === UPLOAD REQUEST STARTED ===');
     console.log('⏰ Timestamp:', new Date().toISOString());
     console.log('📍 Request URL:', req.url);
@@ -166,9 +170,10 @@ export async function POST(req: Request) {
     console.log('   File path:', filePath);
     console.log('   Content type:', file.type);
 
+    const supabase = createAdminClient();
     let uploadData, uploadError;
     try {
-      const uploadResult = await supabaseAdmin.storage
+      const uploadResult = await supabase.storage
         .from('documents')
         .upload(filePath, buffer, {
           contentType: file.type,
@@ -204,7 +209,7 @@ export async function POST(req: Request) {
     console.log('\n🔗 Step 5: Generate Public URL');
     let publicUrl;
     try {
-      const urlResult = supabaseAdmin.storage
+      const urlResult = supabase.storage
         .from('documents')
         .getPublicUrl(uploadData.path);
       
@@ -235,7 +240,7 @@ export async function POST(req: Request) {
     
     let document, dbError;
     try {
-      const insertResult = await supabaseAdmin
+      const insertResult = await supabase
         .from('documents')
         .insert(documentData)
         .select()
@@ -249,7 +254,7 @@ export async function POST(req: Request) {
       console.error('❌ Database insert exception:', dbException.message);
       console.error('   Error details:', dbException);
       // Clean up uploaded file
-      await supabaseAdmin.storage.from('documents').remove([filePath]);
+      await supabase.storage.from('documents').remove([filePath]);
       return Response.json(
         { error: 'Failed to create document record', details: dbException.message },
         { status: 500 }
@@ -262,7 +267,7 @@ export async function POST(req: Request) {
       console.error('   Error message:', dbError?.message);
       console.error('   Error details:', JSON.stringify(dbError, null, 2));
       // Clean up uploaded file
-      await supabaseAdmin.storage.from('documents').remove([filePath]);
+      await supabase.storage.from('documents').remove([filePath]);
       return Response.json(
         { error: 'Failed to create document record', details: dbError?.message || 'Unknown error' },
         { status: 500 }

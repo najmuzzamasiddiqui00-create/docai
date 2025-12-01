@@ -1,15 +1,20 @@
 import { auth } from '@clerk/nextjs/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 
 export async function GET() {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
+
     const { userId } = await auth();
 
     if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: profile, error } = await supabaseAdmin
+    const supabase = createAdminClient();
+    const { data: profile, error } = await supabase
       .from('user_profiles')
       .select('*')
       .eq('clerk_user_id', userId)
@@ -20,7 +25,7 @@ export async function GET() {
     }
 
     // Get subscription
-    const { data: subscription } = await supabaseAdmin
+    const { data: subscription } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
@@ -39,6 +44,10 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
+
     const { userId } = await auth();
 
     if (!userId) {
@@ -48,7 +57,8 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { full_name } = body;
 
-    const { data, error } = await supabaseAdmin
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
       .from('user_profiles')
       .update({ full_name })
       .eq('clerk_user_id', userId)

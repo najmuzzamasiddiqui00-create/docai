@@ -1,9 +1,13 @@
 import { Webhook } from 'svix';
 import { headers } from 'next/headers';
 import { WebhookEvent } from '@clerk/nextjs/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 
 export async function POST(req: Request) {
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return new Response('Skip during build', { status: 200 });
+  }
+
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
   if (!WEBHOOK_SECRET) {
@@ -42,12 +46,13 @@ export async function POST(req: Request) {
   }
 
   const eventType = evt.type;
+  const supabase = createAdminClient();
 
   if (eventType === 'user.created') {
     const { id, email_addresses, first_name, last_name } = evt.data;
 
     // Create user profile in Supabase
-    const { error } = await supabaseAdmin.from('user_profiles').insert({
+    const { error } = await supabase.from('user_profiles').insert({
       clerk_user_id: id,
       email: email_addresses[0].email_address,
       full_name: `${first_name || ''} ${last_name || ''}`.trim() || null,
@@ -59,7 +64,7 @@ export async function POST(req: Request) {
     }
 
     // Create default free subscription
-    await supabaseAdmin.from('subscriptions').insert({
+    await supabase.from('subscriptions').insert({
       user_id: id,
       plan: 'free',
       status: 'active',
@@ -69,7 +74,7 @@ export async function POST(req: Request) {
   if (eventType === 'user.updated') {
     const { id, email_addresses, first_name, last_name } = evt.data;
 
-    await supabaseAdmin
+    await supabase
       .from('user_profiles')
       .update({
         email: email_addresses[0].email_address,
@@ -82,7 +87,7 @@ export async function POST(req: Request) {
     const { id } = evt.data;
 
     // Delete user profile (cascade will handle related data)
-    await supabaseAdmin.from('user_profiles').delete().eq('clerk_user_id', id);
+    await supabase.from('user_profiles').delete().eq('clerk_user_id', id);
   }
 
   return new Response('', { status: 200 });

@@ -1,8 +1,12 @@
 import { auth } from '@clerk/nextjs/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 
 export async function POST(req: Request) {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
+
     const { userId } = await auth();
 
     if (!userId) {
@@ -15,8 +19,9 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Document ID required' }, { status: 400 });
     }
 
+    const supabase = createAdminClient();
     // Get document
-    const { data: document, error: fetchError } = await supabaseAdmin
+    const { data: document, error: fetchError } = await supabase
       .from('documents')
       .select('*')
       .eq('id', documentId)
@@ -28,7 +33,7 @@ export async function POST(req: Request) {
     }
 
     // Generate signed URL (valid for 60 minutes)
-    const { data: signedData, error: signError } = await supabaseAdmin.storage
+    const { data: signedData, error: signError } = await supabase.storage
       .from('documents')
       .createSignedUrl(document.file_path, 3600);
 

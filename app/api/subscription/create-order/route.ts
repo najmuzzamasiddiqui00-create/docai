@@ -1,9 +1,13 @@
 import { auth } from '@clerk/nextjs/server';
 import { razorpay } from '@/lib/razorpay';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase';
 
 export async function POST(req: Request) {
   try {
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return Response.json({ message: 'Skip during build' });
+    }
+
     const { userId } = await auth();
 
     if (!userId) {
@@ -77,15 +81,16 @@ export async function POST(req: Request) {
       );
     }
 
+    const supabase = createAdminClient();
     // Create or update subscription in database
-    const { data: existingSubscription } = await supabaseAdmin
+    const { data: existingSubscription } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
       .single();
 
     if (existingSubscription) {
-      await supabaseAdmin
+      await supabase
         .from('subscriptions')
         .update({
           plan: plan,
@@ -94,7 +99,7 @@ export async function POST(req: Request) {
         })
         .eq('user_id', userId);
     } else {
-      await supabaseAdmin.from('subscriptions').insert({
+      await supabase.from('subscriptions').insert({
         user_id: userId,
         plan: plan,
         razorpay_order_id: order.id,
