@@ -50,8 +50,21 @@ apt-get install -y -qq curl git nginx certbot python3-certbot-nginx ufw fail2ban
 #===============================================================================
 # NODE.JS 20 INSTALLATION
 #===============================================================================
+
+# Helper: Get Node.js major version (returns 0 if not installed or error)
+get_node_major_version() {
+    local version
+    version=$(node -v 2>/dev/null) || { echo 0; return; }
+    # Extract major version: v20.10.0 -> 20
+    if [[ "$version" =~ ^v([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo 0
+    fi
+}
+
 log "Installing Node.js ${NODE_VERSION}..."
-if ! command -v node &> /dev/null || [[ $(node -v | cut -d'.' -f1 | tr -d 'v') -lt 20 ]]; then
+if ! command -v node &> /dev/null || [[ $(get_node_major_version) -lt 20 ]]; then
     curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash -
     apt-get install -y -qq nodejs
 fi

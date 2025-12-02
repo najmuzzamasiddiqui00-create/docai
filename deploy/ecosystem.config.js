@@ -17,9 +17,8 @@ module.exports = {
     out_file: '/var/log/docai/out.log',
     log_file: '/var/log/docai/combined.log',
     time: true,
-    // Graceful restart
+    // Graceful shutdown timeout (ms)
     kill_timeout: 5000,
-    wait_ready: true,
-    listen_timeout: 10000,
+    // Note: wait_ready removed - Next.js doesn't emit PM2 ready signal
   }]
 };

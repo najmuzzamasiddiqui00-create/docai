@@ -16,7 +16,7 @@ warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 APP_DIR="/var/www/docai"
-cd $APP_DIR
+cd "$APP_DIR"
 
 log "========================================="
 log "DocAI Update Deployment"
@@ -29,12 +29,13 @@ fi
 
 # Check if env file has empty values
 EMPTY_VARS=0
+EMPTY_VARS=0
 while IFS='=' read -r key value; do
     # Skip comments and empty lines
     [[ $key =~ ^#.*$ ]] && continue
     [[ -z $key ]] && continue
     # Check if value is empty
-    if [[ -z $value ]] && [[ $key != "#"* ]]; then
+    if [[ -z $value ]]; then
         warn "Empty value for: $key"
         EMPTY_VARS=$((EMPTY_VARS + 1))
     fi

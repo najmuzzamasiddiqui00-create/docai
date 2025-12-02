@@ -45,8 +45,13 @@ jobs:
             cd /var/www/docai
             git fetch origin
             git reset --hard origin/main
-            npm ci --production=false
+            # Install all deps (including dev) for build
+            npm ci
+            # Build the application
             npm run build
+            # Prune devDependencies after build to save space
+            npm prune --omit=dev
+            # Reload PM2
             pm2 reload ecosystem.config.js --env production
             echo "Deployment complete!"
 

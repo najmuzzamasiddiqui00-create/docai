@@ -282,6 +282,11 @@ async function callOpenAI(
             continue;
           }
           
+          // Exhausted retries on retryable error, try next model
+          if (isRetryableError(status)) {
+            break;
+          }
+          
           return null;
         }
         

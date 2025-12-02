@@ -25,6 +25,27 @@ import { headers } from 'next/headers';
 // Maximum text to store in database
 const MAX_STORED_TEXT = 10000;
 
+/**
+ * Verify internal API secret for server-to-server calls
+ * Returns true if valid, false otherwise
+ */
+function verifyInternalAuth(req: NextRequest): boolean {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return false;
+  }
+  
+  const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+  const internalSecret = process.env.INTERNAL_API_SECRET;
+  
+  if (!internalSecret) {
+    console.error('[process-document] INTERNAL_API_SECRET not configured');
+    return false;
+  }
+  
+  return token === internalSecret;
+}
+
 export async function POST(req: NextRequest) {
   let documentId: string | null = null;
   const log = createRequestLogger('process-document');
@@ -37,12 +58,20 @@ export async function POST(req: NextRequest) {
     
     log.info('Processing request received');
     
-    // Authentication check
+    // Check for internal API auth (server-to-server) OR user auth (manual retry)
+    const isInternalCall = verifyInternalAuth(req);
     const { userId } = await auth();
-    if (!userId) {
-      log.warn('Unauthorized processing request');
+    
+    if (!isInternalCall && !userId) {
+      log.warn('Unauthorized processing request - no internal auth or user session');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    
+    // Log auth method for debugging
+    log.info('Request authenticated', { 
+      method: isInternalCall ? 'internal-api' : 'user-session',
+      userId: userId || 'internal'
+    });
     
     // Rate limiting
     const headersList = headers();
@@ -189,10 +218,9 @@ export async function POST(req: NextRequest) {
         processed_output: processedOutput,
         processed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        error: null,
       })
       .eq('id', documentId);
-
+    
     if (saveError) {
       log.error('Failed to save results', { error: saveError.message });
       throw new Error(`Failed to save results: ${saveError.message}`);

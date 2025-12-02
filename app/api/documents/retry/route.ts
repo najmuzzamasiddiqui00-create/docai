@@ -58,6 +58,15 @@ export async function POST(req: Request) {
 
     // Update to processing status and increment retry count
     const retryCount = (document.retry_count || 0) + 1;
+    const MAX_RETRIES = 3;
+    
+    if (retryCount > MAX_RETRIES) {
+      log.warn('Maximum retry attempts exceeded', { documentId, retryCount });
+      return Response.json(
+        { error: 'Maximum retry attempts exceeded', retryCount: document.retry_count },
+        { status: 429 }
+      );
+    }
     
     const { error: updateError } = await supabase
       .from('documents')
@@ -75,7 +84,6 @@ export async function POST(req: Request) {
     }
 
     log.info('Document status set to processing', { retryCount });
-
     // Download file from storage
     log.info('Downloading file from storage');
     const { data: fileData, error: downloadError } = await supabase

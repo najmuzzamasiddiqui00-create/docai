@@ -221,13 +221,14 @@ export function logError(message: string, meta?: LogMeta): void {
  * 
  * export async function POST(request: NextRequest) {
  *   const logger = createLogger(request);
+ *   let text: string | undefined = undefined;
  *   
  *   try {
  *     const { documentId } = await request.json();
  *     logger.logInfo('Processing started', { documentId });
  *     
  *     // Extract text
- *     const text = await extractText(document);
+ *     text = await extractText(document);
  *     logger.logInfo('Text extracted', { 
  *       documentId, 
  *       textLength: text.length 

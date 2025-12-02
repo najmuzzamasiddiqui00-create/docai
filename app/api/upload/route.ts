@@ -23,8 +23,16 @@ const ALLOWED_TYPES = [
 /**
  * Fire-and-forget enqueue processing with 3 retries
  * Does not block upload response
+ * Uses INTERNAL_API_SECRET for server-to-server authentication
  */
 async function safeEnqueueProcessing(documentId: string): Promise<void> {
+  // Validate internal API secret exists (server-only, never NEXT_PUBLIC_)
+  const internalSecret = process.env.INTERNAL_API_SECRET;
+  if (!internalSecret) {
+    console.error('[safeEnqueueProcessing] INTERNAL_API_SECRET not configured - skipping processing enqueue');
+    return;
+  }
+
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL 
     || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');  
   const url = `${baseUrl}/api/process-document`;
@@ -37,7 +45,10 @@ async function safeEnqueueProcessing(documentId: string): Promise<void> {
       await fetch(url, {
         method: 'POST',
         body,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${internalSecret}`,
+        },
         keepalive: true,
         // Short timeout - we don't wait for processing to complete
         signal: AbortSignal.timeout(5000),
