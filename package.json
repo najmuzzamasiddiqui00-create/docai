@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "cleanup": "node scripts/cleanup.js",
+    "scan:dead-files": "node scripts/scan-dead-files.js",
     "prepare": "husky install",
     "security:audit": "bash scripts/security-audit.sh",
     "security:scan": "gitleaks detect --source . --config .gitleaks.toml --verbose",
