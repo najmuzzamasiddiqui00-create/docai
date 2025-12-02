@@ -2,7 +2,6 @@ import { auth } from '@clerk/nextjs/server';
 import { getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 import { checkUserCredits, incrementCreditUsage } from '@/lib/credits';
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders, getRateLimitKey } from '@/lib/rateLimit';
-import { postToN8n } from '@/lib/postToN8n';
 import { headers } from 'next/headers';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -268,42 +267,10 @@ export async function POST(req: Request) {
       // Don't fail the upload - credit tracking is not critical
     }
 
-    // 8. Post to N8N webhook (if configured) with retry
-    console.log('\n🔗 Step 8: Post to N8N Webhook');
-    const n8nResult = await postToN8n({
-      documentId: document.id,
-      fileUrl: publicUrl,
-      userId: userId,
-      fileName: file.name,
-      fileType: file.type,
-    });
-
-    if (!n8nResult.success && process.env.N8N_WEBHOOK_URL) {
-      // N8N is configured but failed - mark document as failed
-      console.error('❌ N8N webhook failed - marking document as failed');
-      await supabase
-        .from('documents')
-        .update({
-          status: 'failed',
-          error: `Webhook failed: ${n8nResult.error}`,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', document.id);
-      
-      return Response.json({
-        success: false,
-        error: 'Failed to queue document for processing',
-        documentId: document.id,
-        document: {
-          id: document.id,
-          status: 'failed',
-          file_name: document.file_name,
-          error: n8nResult.error,
-        },
-      }, { status: 500 });
-    }
-
-    console.log('✅ N8N webhook handled (or not configured)');
+    // 8. Document ready - frontend will trigger /api/process-document
+    console.log('\n✅ Document ready for processing');
+    console.log('   Status: queued');
+    console.log('   Frontend will call /api/process-document');
 
     const duration = Date.now() - startTime;
     console.log(`\n✅✅✅ === UPLOAD COMPLETED === ✅✅✅`);
@@ -311,8 +278,6 @@ export async function POST(req: Request) {
     console.log(`   Document ID: ${document.id}`);
     console.log(`   Status: ${document.status}`);
     console.log(`   File URL: ${publicUrl}`);
-    console.log(`   N8N configured: ${!!process.env.N8N_WEBHOOK_URL}`);
-    console.log(`   Processing: ${process.env.N8N_WEBHOOK_URL ? 'N8N webhook triggered' : 'Frontend triggers /api/process-document'}`);
     console.log('='.repeat(60) + '\n');
 
     // Return immediately with documentId

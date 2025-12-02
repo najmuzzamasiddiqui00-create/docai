@@ -6,8 +6,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { validateServerEnv, isBuildPhase } from '@/lib/safeEnv';
-import { checkGeminiHealth } from '@/lib/geminiClient';
+import { isBuildPhase, validateEnvVars } from '@/lib/runtime';
 
 export async function GET() {
   try {
@@ -20,23 +19,20 @@ export async function GET() {
     }
 
     // Validate environment
-    const { valid, missing } = validateServerEnv();
-    
-    // Check Gemini API
-    const geminiHealth = await checkGeminiHealth();
+    const missingVars = validateEnvVars();
+    const envValid = missingVars.length === 0;
 
     const response = {
-      status: valid && geminiHealth.healthy ? 'healthy' : 'unhealthy',
+      status: envValid ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV,
       checks: {
         environment: {
-          status: valid ? 'ok' : 'error',
-          missing: valid ? undefined : missing,
+          status: envValid ? 'ok' : 'error',
+          missing: envValid ? undefined : missingVars,
         },
         gemini: {
-          status: geminiHealth.healthy ? 'ok' : 'error',
-          error: geminiHealth.error,
+          status: process.env.GEMINI_API_KEY ? 'ok' : 'error',
         },
         supabase: {
           status: process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY ? 'ok' : 'error',

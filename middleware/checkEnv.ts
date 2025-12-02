@@ -6,8 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { validateServerEnv, isBuildPhase } from '@/lib/safeEnv';
-import { safeErrorResponse } from '@/lib/security';
+import { validateEnvVars, isBuildPhase } from '@/lib/runtime';
 
 /**
  * Middleware to check environment variables before route execution.
@@ -29,9 +28,9 @@ export function withEnvCheck(
       }
 
       // Validate environment
-      const { valid, missing } = validateServerEnv();
+      const missing = validateEnvVars();
       
-      if (!valid) {
+      if (missing.length > 0) {
         console.error('[EnvCheck] Missing environment variables:', missing);
         return NextResponse.json(
           {
@@ -45,8 +44,12 @@ export function withEnvCheck(
 
       // Execute route handler
       return await handler(req);
-    } catch (error) {
-      return safeErrorResponse(error);
+    } catch (error: any) {
+      console.error('[EnvCheck] Error:', error.message);
+      return NextResponse.json(
+        { error: 'Internal server error' },
+        { status: 500 }
+      );
     }
   };
 }
@@ -80,8 +83,12 @@ export function requireEnvs(...keys: string[]) {
         }
 
         return await handler(req);
-      } catch (error) {
-        return safeErrorResponse(error);
+      } catch (error: any) {
+        console.error('[EnvCheck] Error:', error.message);
+        return NextResponse.json(
+          { error: 'Internal server error' },
+          { status: 500 }
+        );
       }
     };
   };
@@ -96,7 +103,8 @@ export function createHealthCheck() {
       return NextResponse.json({ status: 'build-phase' });
     }
 
-    const { valid, missing } = validateServerEnv();
+    const missing = validateEnvVars();
+    const valid = missing.length === 0;
     
     return NextResponse.json({
       status: valid ? 'healthy' : 'unhealthy',
