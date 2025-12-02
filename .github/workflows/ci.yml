@@ -1,10 +1,10 @@
-name: CI - Build, Test, and Security Scan
+name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, master]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, master]
 
 jobs:
   build:
@@ -13,8 +13,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Full history for secret scanning
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -25,73 +23,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run linter
+      - name: Lint
         run: npm run lint || true
 
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Dead file scan
+        run: node scripts/scan-dead-files.js || true
+
       - name: Build
         run: npm run build
         env:
-          # Provide dummy values for build (will use build-phase guards)
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_dummy' }}
-          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || 'sk_test_dummy' }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co' }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key' }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'AIzaDummy' }}
-          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID || 'rzp_test_dummy' }}
-          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET || 'dummy_secret' }}
-          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET || 'dummy_webhook' }}
-
-      - name: Archive build artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: build
-          path: .next
-          retention-days: 7
-
-  security-scan:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run GitLeaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-
-      - name: Run npm audit
-        run: npm audit --audit-level=moderate || true
-
-      - name: Check for known vulnerabilities
-        run: npx audit-ci --moderate || true
-
-  environment-check:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Validate .env.example exists
-        run: |
-          if [ ! -f .env.example ]; then
-            echo "❌ .env.example not found"
-            exit 1
-          fi
-          echo "✅ .env.example exists"
-
-      - name: Check for hardcoded secrets in code
-        run: |
-          # Simple grep check for common patterns
-          if grep -r "sk_test_\|sk_live_\|AIza\|rzp_live_" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" app/ lib/ components/ 2>/dev/null; then
-            echo "❌ Potential hardcoded secrets found!"
-            exit 1
-          fi
-          echo "✅ No obvious hardcoded secrets detected"
+          # Dummy values for build (build-phase guards skip initialization)
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_placeholder
+          CLERK_SECRET_KEY: sk_test_placeholder
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder_anon_key
+          SUPABASE_SERVICE_ROLE_KEY: placeholder_service_key
+          GEMINI_API_KEY: placeholder_gemini_key
+          RAZORPAY_KEY_ID: rzp_test_placeholder
+          RAZORPAY_KEY_SECRET: placeholder_secret

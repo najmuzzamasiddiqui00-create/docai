@@ -24,8 +24,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env*
+# local env files - NEVER COMMIT SECRETS
+.env
+.env.*
+.env.local
+.env.production
+.env.production.local
+!.env.example
+!deploy/.env.production.template
+
+# Private keys
+*.pem
+*.key
+id_rsa*
 
 # VS Code
 .vscode/

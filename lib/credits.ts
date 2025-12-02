@@ -1,4 +1,4 @@
-import { getSupabaseAdminClient, isBuildPhase } from './runtime';
+import { getAdminClient, isBuildPhase } from './supabase';
 
 // Credit system constants
 export const FREE_CREDIT_LIMIT = 5;
@@ -32,7 +32,7 @@ export async function checkUserCredits(clerkUserId: string): Promise<CreditCheck
   }
 
   try {
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getAdminClient();
     // Fetch user profile from database (server-side only)
     const { data: user, error } = await supabaseAdmin
       .from('user_profiles')
@@ -117,7 +117,7 @@ export async function incrementCreditUsage(clerkUserId: string): Promise<void> {
   }
 
   try {
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getAdminClient();
     // Fetch current user data
     const { data: user, error: fetchError } = await supabaseAdmin
       .from('user_profiles')
@@ -173,7 +173,7 @@ export async function createUserProfile(
   }
 
   try {
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('user_profiles')
       .insert({
@@ -211,7 +211,7 @@ export async function activateSubscription(
   }
 
   try {
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getAdminClient();
     const { error } = await supabaseAdmin
       .from('user_profiles')
       .update({
@@ -248,7 +248,7 @@ export async function getUserCreditStatus(clerkUserId: string) {
   }
 
   try {
-    const supabase = getSupabaseAdminClient();
+    const supabase = getAdminClient();
     const { data: user, error } = await supabase
       .from('user_profiles')
       .select('free_credits_used, plan, subscription_status')

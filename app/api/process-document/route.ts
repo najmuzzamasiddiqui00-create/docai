@@ -1,19 +1,33 @@
-// Internal Document Processing Route
-// NO Edge Functions, NO n8n - Pure Next.js backend processing
-// ZERO top-level initialization - all clients created at request time
+/**
+ * Internal Document Processing Route
+ * 
+ * NO Edge Functions, NO n8n - Pure Next.js backend processing
+ * ZERO top-level initialization - all clients created at request time
+ * 
+ * Flow:
+ * 1. Receive documentId from upload route (or retry)
+ * 2. Update status to 'processing'
+ * 3. Download file from Supabase Storage
+ * 4. Extract text (pdf-parse, mammoth, or plain text)
+ * 5. Analyze with AI (Gemini primary, OpenAI fallback)
+ * 6. Save results and update status to 'completed' or 'failed'
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
+import { getAdminClient, isBuildPhase } from '@/lib/supabase';
 import { extractText } from '@/lib/text-extractor';
-import { analyzeTextWithGemini } from '@/lib/gemini';
+import { analyzeText } from '@/lib/gemini';
+import { createRequestLogger, logAndSanitize } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders, getRateLimitKey } from '@/lib/rateLimit';
 import { headers } from 'next/headers';
 
-export async function POST(req: NextRequest) {
-  console.log('\n🔄 === INTERNAL PROCESSING STARTED ===');
-  console.log('⏰ Timestamp:', new Date().toISOString());
+// Maximum text to store in database
+const MAX_STORED_TEXT = 10000;
 
+export async function POST(req: NextRequest) {
   let documentId: string | null = null;
+  const log = createRequestLogger('process-document');
 
   try {
     // Build phase guard
@@ -21,10 +35,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'Skip during build' });
     }
     
+    log.info('Processing request received');
+    
     // Authentication check
     const { userId } = await auth();
     if (!userId) {
-      console.log('❌ Unauthorized request');
+      log.warn('Unauthorized processing request');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
@@ -35,7 +51,7 @@ export async function POST(req: NextRequest) {
     const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.process);
     
     if (!rateLimit.allowed) {
-      console.log(`❌ Rate limit exceeded for ${rateLimitKey}`);
+      log.warn('Rate limit exceeded', { userId });
       return NextResponse.json(
         { error: 'Too many requests. Please wait.', retryAfter: rateLimit.retryAfter },
         { status: 429, headers: rateLimitHeaders(rateLimit) }
@@ -46,20 +62,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     documentId = body.documentId;
 
-    console.log('📋 Request payload:', { documentId });
-
     if (!documentId) {
-      console.error('❌ Missing documentId');
+      log.warn('Missing documentId in request');
       return NextResponse.json(
         { error: 'Missing documentId' },
         { status: 400 }
       );
     }
 
+    log.info('Processing started', { documentId });
+
     // ===== STEP 1: Get document from database =====
-    console.log('\n📝 Step 1: Fetching document from database...');
-    
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getAdminClient();
     const { data: document, error: fetchError } = await supabaseAdmin
       .from('documents')
       .select('*')
@@ -67,21 +81,20 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (fetchError || !document) {
-      console.error('❌ Document not found:', fetchError?.message);
+      log.error('Document not found', { documentId, error: fetchError?.message });
       return NextResponse.json(
         { error: 'Document not found' },
         { status: 404 }
       );
     }
 
-    console.log('✅ Document found:', document.file_name);
-    console.log('   File path:', document.file_path);
-    console.log('   File type:', document.file_type);
-    console.log('   Current status:', document.status);
+    log.info('Document retrieved', { 
+      fileName: document.file_name,
+      fileType: document.file_type,
+      status: document.status 
+    });
 
     // ===== STEP 2: Update status to processing =====
-    console.log('\n📝 Step 2: Updating status to processing...');
-    
     const { error: updateError } = await supabaseAdmin
       .from('documents')
       .update({ 
@@ -91,16 +104,14 @@ export async function POST(req: NextRequest) {
       .eq('id', documentId);
 
     if (updateError) {
-      console.error('❌ Failed to update status:', updateError.message);
+      log.error('Failed to update status', { error: updateError.message });
       throw new Error(`Database update failed: ${updateError.message}`);
     }
 
-    console.log('✅ Status updated to processing');
+    log.info('Status updated to processing');
 
     // ===== STEP 3: Download file from Supabase Storage =====
-    console.log('\n📥 Step 3: Downloading file from storage...');
-    console.log('   Bucket: documents');
-    console.log('   Path:', document.file_path);
+    log.info('Downloading file from storage', { path: document.file_path });
 
     const { data: fileData, error: downloadError } = await supabaseAdmin
       .storage
@@ -108,21 +119,18 @@ export async function POST(req: NextRequest) {
       .download(document.file_path);
 
     if (downloadError || !fileData) {
-      console.error('❌ File download failed:', downloadError?.message);
+      log.error('File download failed', { error: downloadError?.message });
       throw new Error(`File download failed: ${downloadError?.message}`);
     }
-
-    console.log('✅ File downloaded');
-    console.log('   Size:', fileData.size, 'bytes');
 
     // Convert Blob to Buffer
     const arrayBuffer = await fileData.arrayBuffer();
     const fileBuffer = Buffer.from(arrayBuffer);
 
-    console.log('✅ File buffer created:', fileBuffer.length, 'bytes');
+    log.info('File downloaded', { sizeBytes: fileBuffer.length });
 
     // ===== STEP 4: Extract text =====
-    console.log('\n📄 Step 4: Extracting text from file...');
+    log.info('Extracting text from file');
     
     let extractedText: string;
     try {
@@ -131,43 +139,48 @@ export async function POST(req: NextRequest) {
         document.file_type,
         document.file_name
       );
-      
-      console.log('✅ Text extracted');
-      console.log('   Length:', extractedText.length, 'characters');
-      console.log('   Preview:', extractedText.substring(0, 100).replace(/\n/g, ' '));
 
       if (!extractedText || extractedText.trim().length === 0) {
         throw new Error('No text could be extracted from file');
       }
-    } catch (extractError: any) {
-      console.error('❌ Text extraction error:', extractError.message);
-      throw new Error(`Text extraction failed: ${extractError.message}`);
+      log.info('Text extracted', { 
+        length: extractedText.length
+      });    } catch (extractError) {
+      log.error('Text extraction error', { 
+        error: extractError instanceof Error ? extractError.message : 'Unknown' 
+      });
+      throw new Error(`Text extraction failed: ${extractError instanceof Error ? extractError.message : 'Unknown error'}`);
     }
 
-    // ===== STEP 5: Analyze with Gemini =====
-    console.log('\n🤖 Step 5: Analyzing with Gemini...');
+    // ===== STEP 5: Analyze with AI =====
+    log.info('Starting AI analysis');
     
     let analysisResult;
     try {
-      analysisResult = await analyzeTextWithGemini(extractedText);
+      analysisResult = await analyzeText(extractedText);
       
-      console.log('✅ Gemini analysis complete');
-      console.log('   Summary:', analysisResult.summary.substring(0, 100));
-      console.log('   Key points:', analysisResult.keyPoints.length);
-      console.log('   Keywords:', analysisResult.keywords.length);
-    } catch (geminiError: any) {
-      console.error('❌ Gemini analysis error:', geminiError.message);
-      throw new Error(`AI analysis failed: ${geminiError.message}`);
+      log.info('AI analysis complete', {
+        summaryLength: analysisResult.summary.length,
+        keyPointsCount: analysisResult.keyPoints.length,
+        keywordsCount: analysisResult.keywords.length,
+        category: analysisResult.category,
+        sentiment: analysisResult.sentiment
+      });
+    } catch (aiError) {
+      log.error('AI analysis error', { 
+        error: aiError instanceof Error ? aiError.message : 'Unknown' 
+      });
+      throw new Error(`AI analysis failed: ${aiError instanceof Error ? aiError.message : 'Unknown error'}`);
     }
 
-    // Add extracted text to result
+    // Build processed output with truncated extracted text
     const processedOutput = {
       ...analysisResult,
-      extracted_text: extractedText.substring(0, 10000), // Store first 10k chars
+      extracted_text: extractedText.substring(0, MAX_STORED_TEXT),
     };
 
     // ===== STEP 6: Save results to database =====
-    console.log('\n💾 Step 6: Saving results to database...');
+    log.info('Saving results to database');
     
     const { error: saveError } = await supabaseAdmin
       .from('documents')
@@ -181,18 +194,11 @@ export async function POST(req: NextRequest) {
       .eq('id', documentId);
 
     if (saveError) {
-      console.error('❌ Failed to save results:', saveError.message);
+      log.error('Failed to save results', { error: saveError.message });
       throw new Error(`Failed to save results: ${saveError.message}`);
     }
 
-    console.log('✅ Results saved to database');
-
-    console.log('\n✅✅✅ === PROCESSING COMPLETE === ✅✅✅');
-    console.log('   Document ID:', documentId);
-    console.log('   Status: completed');
-    console.log('   Summary length:', processedOutput.summary.length);
-    console.log('   Key points:', processedOutput.keyPoints.length);
-    console.log('   Keywords:', processedOutput.keywords.length);
+    log.info('Processing complete', { documentId, status: 'completed' });
 
     return NextResponse.json({
       success: true,
@@ -201,29 +207,28 @@ export async function POST(req: NextRequest) {
       processed_output: processedOutput,
     });
 
-  } catch (error: any) {
-    console.error('\n❌❌❌ === PROCESSING FAILED === ❌❌❌');
-    console.error('   Error name:', error.name);
-    console.error('   Error message:', error.message);
-    console.error('   Error stack:', error.stack?.substring(0, 500));
+  } catch (error) {
+    const safeMessage = logAndSanitize(log, error, 'process-document');
 
     // Update document to failed status
     if (documentId) {
-      console.log('\n🔄 Updating document status to failed...');
+      log.info('Updating document status to failed', { documentId });
       try {
-        const supabaseAdmin = getSupabaseAdminClient();
+        const supabaseAdmin = getAdminClient();
         await supabaseAdmin
           .from('documents')
           .update({
             status: 'failed',
-            error: error.message,
+            error: error instanceof Error ? error.message : 'Processing failed',
             updated_at: new Date().toISOString(),
           })
           .eq('id', documentId);
         
-        console.log('✅ Document marked as failed');
-      } catch (updateError: any) {
-        console.error('⚠️ Could not update failed status:', updateError.message);
+        log.info('Document marked as failed');
+      } catch (updateError) {
+        log.warn('Could not update failed status', { 
+          error: updateError instanceof Error ? updateError.message : 'Unknown' 
+        });
       }
     }
 
@@ -231,7 +236,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Processing failed',
+        error: safeMessage,
         documentId,
       },
       { status: 500 }

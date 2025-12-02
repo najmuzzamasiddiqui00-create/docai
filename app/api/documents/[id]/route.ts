@@ -1,11 +1,14 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
+import { getAdminClient, isBuildPhase } from '@/lib/supabase';
+import { createRequestLogger, logAndSanitize } from '@/lib/logger';
 
 export async function GET(
   req: Request,
   { params }: { params: { id: string } }
 ) {
+  const log = createRequestLogger('documents/[id]', params.id);
+  
   try {
     // Build phase guard
     if (isBuildPhase()) {
@@ -15,17 +18,15 @@ export async function GET(
     const { userId } = await auth();
 
     if (!userId) {
-      console.log('❌ Unauthorized request to /api/documents/[id]');
+      log.warn('Unauthorized request');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const documentId = params.id;
-
-    console.log(`\n📄 GET /api/documents/${documentId}`);
-    console.log(`   User: ${userId}`);
+    log.info('Fetching document', { documentId, userId });
 
     // Get document from database
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getAdminClient();
     const { data: document, error } = await supabaseAdmin
       .from('documents')
       .select('*')
@@ -34,26 +35,31 @@ export async function GET(
       .single();
 
     if (error || !document) {
-      console.error('❌ Document not found:', error?.message);
+      log.warn('Document not found', { error: error?.message });
       return NextResponse.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    console.log(`✅ Document found`);
-    console.log(`   Status: ${document.status}`);
-    console.log(`   Has processed_output: ${!!document.processed_output}`);
-    console.log(`   Has error: ${!!document.error}`);
+    log.info('Document found', { 
+      status: document.status,
+      hasProcessedOutput: !!document.processed_output 
+    });
 
     // Normalize processed_output to object if stored as TEXT
-    let processedOutput: any = document.processed_output || null;
-    if (processedOutput && typeof processedOutput === 'string') {
-      try {
-        processedOutput = JSON.parse(processedOutput);
-      } catch {
-        // leave as null to avoid UI crashes if invalid JSON
-        processedOutput = null;
+    let processedOutput: Record<string, unknown> | null = null;
+    if (document.processed_output) {
+      if (typeof document.processed_output === 'string') {
+        try {
+          processedOutput = JSON.parse(document.processed_output);
+        } catch (parseError) {
+          log.warn('Failed to parse processed_output as JSON', { 
+            error: parseError instanceof Error ? parseError.message : String(parseError) 
+          });
+          processedOutput = null;
+        }
+      } else {
+        processedOutput = document.processed_output;
       }
     }
-
     // ALWAYS return JSON - never HTML
     const response = {
       document: {
@@ -72,15 +78,12 @@ export async function GET(
     };
 
     return NextResponse.json(response);
-  } catch (error: any) {
-    console.error('❌ Error in GET /api/documents/[id]:', error.message);
+  } catch (error) {
+    const safeMessage = logAndSanitize(log, error, 'get-document');
     
     // ALWAYS return JSON even on error
     return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error.message,
-      },
+      { error: safeMessage },
       { status: 500 }
     );
   }
@@ -90,6 +93,8 @@ export async function DELETE(
   req: Request,
   { params }: { params: { id: string } }
 ) {
+  const log = createRequestLogger('documents/[id]/delete', params.id);
+  
   try {
     // Build phase guard
     if (isBuildPhase()) {
@@ -99,13 +104,15 @@ export async function DELETE(
     const { userId } = await auth();
 
     if (!userId) {
+      log.warn('Unauthorized delete request');
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const documentId = params.id;
+    log.info('Deleting document', { documentId, userId });
 
     // Get document
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getAdminClient();
     const { data: document, error: fetchError } = await supabaseAdmin
       .from('documents')
       .select('*')
@@ -114,14 +121,20 @@ export async function DELETE(
       .single();
 
     if (fetchError || !document) {
+      log.warn('Document not found for deletion');
       return Response.json({ error: 'Document not found' }, { status: 404 });
     }
 
     // Delete from storage
     if (document.file_path) {
-      await supabaseAdmin.storage
+      const { error: storageError } = await supabaseAdmin.storage
         .from('documents')
         .remove([document.file_path]);
+      
+      if (storageError) {
+        log.warn('Failed to delete from storage', { error: storageError.message });
+        // Continue with database deletion anyway
+      }
     }
 
     // Delete from database
@@ -131,19 +144,19 @@ export async function DELETE(
       .eq('id', documentId);
 
     if (deleteError) {
-      console.error('❌ Failed to delete document:', deleteError);
+      log.error('Failed to delete document', { error: deleteError.message });
       return Response.json(
         { error: 'Failed to delete document' },
         { status: 500 }
       );
     }
 
-    console.log(`✅ Document ${documentId} deleted successfully`);
+    log.info('Document deleted successfully');
     return Response.json({ success: true });
-  } catch (error: any) {
-    console.error('❌ Delete error:', error);
+  } catch (error) {
+    const safeMessage = logAndSanitize(log, error, 'delete-document');
     return Response.json(
-      { error: 'Internal server error', message: error.message },
+      { error: safeMessage },
       { status: 500 }
     );
   }

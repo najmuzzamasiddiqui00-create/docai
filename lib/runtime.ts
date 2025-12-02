@@ -1,17 +1,33 @@
 /**
  * Runtime-Safe Client Initialization
  * 
+ * DEPRECATED: This file is maintained for backward compatibility.
+ * New code should import from:
+ *   - @/lib/supabase for Supabase clients (getAdminClient, createClient, etc.)
+ *   - @/lib/logger for logging
+ *   - @/lib/gemini for AI analysis
+ * 
  * All clients are created at REQUEST TIME ONLY - never at module load time.
  * This prevents Vercel build-phase failures when environment variables
  * are not available during static page generation.
- * 
- * USAGE:
- *   const supabase = getSupabaseClient();
- *   const admin = getSupabaseAdminClient();
- *   const gemini = getGeminiClient();
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import Razorpay from 'razorpay';
+
+// Re-export everything from lib/supabase for backward compatibility
+export {
+  isBuildPhase,
+  RuntimeError,
+  createClient,
+  createAdminClient,
+  getAdminClient,
+  getSupabaseClient,
+  getSupabaseAdminClient,
+  type SupabaseClient,
+} from './supabase';
+
+// Import RuntimeError and resetClients for use in this file
+import { RuntimeError, isBuildPhase, resetClients as resetSupabaseClients } from './supabase';
 
 // ============================================================================
 // TYPES
@@ -27,130 +43,36 @@ export interface GeminiResponse {
   raw: any;
 }
 
-export class RuntimeError extends Error {
-  constructor(
-    message: string,
-    public readonly code: string,
-    public readonly missingVars?: string[]
-  ) {
-    super(message);
-    this.name = 'RuntimeError';
-  }
-
-  toJSON() {
-    return {
-      error: this.message,
-      code: this.code,
-      missingVars: this.missingVars,
-    };
-  }
-}
-
 // ============================================================================
-// BUILD PHASE DETECTION
+// HELPER: handleRuntimeError
 // ============================================================================
 
 /**
- * Check if we're in Vercel/Next.js build phase
+ * Helper to handle RuntimeError in API routes.
+ * Returns a clean JSON response for client.
  */
-export function isBuildPhase(): boolean {
-  return process.env.NEXT_PHASE === 'phase-production-build';
-}
-
-/**
- * Throw if called during build phase
- */
-function assertNotBuildPhase(clientName: string): void {
-  if (isBuildPhase()) {
-    throw new RuntimeError(
-      `${clientName} cannot be initialized during build phase`,
-      'BUILD_PHASE_ERROR'
-    );
-  }
-}
-
-// ============================================================================
-// SUPABASE PUBLIC CLIENT (Anon Key)
-// ============================================================================
-
-let _supabaseClient: SupabaseClient | null = null;
-
-/**
- * Get Supabase client with anon key (public client).
- * Safe for client-side and server-side use.
- * 
- * @throws RuntimeError if NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY missing
- */
-export function getSupabaseClient(): SupabaseClient {
-  assertNotBuildPhase('SupabaseClient');
-
-  // Return cached instance
-  if (_supabaseClient) {
-    return _supabaseClient;
-  }
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  const missing: string[] = [];
-  if (!url) missing.push('NEXT_PUBLIC_SUPABASE_URL');
-  if (!anonKey) missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-
-  if (missing.length > 0) {
-    throw new RuntimeError(
-      'Supabase public keys missing',
-      'SUPABASE_PUBLIC_KEYS_MISSING',
-      missing
+export function handleRuntimeError(error: unknown): Response {
+  if (error instanceof RuntimeError) {
+    console.error(`[RuntimeError] ${error.code}: ${error.message}`);
+    return Response.json(
+      { error: error.message, code: error.code },
+      { status: 500 }
     );
   }
 
-  _supabaseClient = createClient(url!, anonKey!);
-  return _supabaseClient;
-}
-
-// ============================================================================
-// SUPABASE ADMIN CLIENT (Service Role Key)
-// ============================================================================
-
-let _supabaseAdminClient: SupabaseClient | null = null;
-
-/**
- * Get Supabase admin client with service role key.
- * SERVER-SIDE ONLY - never expose to client.
- * 
- * @throws RuntimeError if NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing
- */
-export function getSupabaseAdminClient(): SupabaseClient {
-  assertNotBuildPhase('SupabaseAdminClient');
-
-  // Return cached instance
-  if (_supabaseAdminClient) {
-    return _supabaseAdminClient;
-  }
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  const missing: string[] = [];
-  if (!url) missing.push('NEXT_PUBLIC_SUPABASE_URL');
-  if (!serviceKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
-
-  if (missing.length > 0) {
-    throw new RuntimeError(
-      'Server key missing',
-      'SUPABASE_ADMIN_KEYS_MISSING',
-      missing
+  if (error instanceof Error) {
+    console.error(`[Error] ${error.message}`);
+    return Response.json(
+      { error: error.message },
+      { status: 500 }
     );
   }
 
-  _supabaseAdminClient = createClient(url!, serviceKey!, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-
-  return _supabaseAdminClient;
+  console.error('[UnknownError]', error);
+  return Response.json(
+    { error: 'Internal server error' },
+    { status: 500 }
+  );
 }
 
 // ============================================================================
@@ -163,10 +85,13 @@ let _geminiApiKey: string | null = null;
  * Get Gemini API client.
  * Uses REST API directly - no SDK required.
  * 
+ * @deprecated Use analyzeDocument/analyzeText from @/lib/gemini instead
  * @throws RuntimeError if GEMINI_API_KEY missing
  */
 export function getGeminiClient(): GeminiClient {
-  assertNotBuildPhase('GeminiClient');
+  if (isBuildPhase()) {
+    throw new RuntimeError('GeminiClient cannot be initialized during build phase', 'BUILD_PHASE_ERROR');
+  }
 
   // Get and cache API key
   if (!_geminiApiKey) {
@@ -213,10 +138,13 @@ export function getGeminiClient(): GeminiClient {
 /**
  * Get just the Gemini API key (for custom requests).
  * 
+ * @deprecated Use analyzeDocument/analyzeText from @/lib/gemini instead
  * @throws RuntimeError if GEMINI_API_KEY missing
  */
 export function getGeminiApiKey(): string {
-  assertNotBuildPhase('GeminiApiKey');
+  if (isBuildPhase()) {
+    throw new RuntimeError('GeminiApiKey cannot be accessed during build phase', 'BUILD_PHASE_ERROR');
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -233,8 +161,6 @@ export function getGeminiApiKey(): string {
 // RAZORPAY CLIENT
 // ============================================================================
 
-import Razorpay from 'razorpay';
-
 let _razorpayClient: Razorpay | null = null;
 
 /**
@@ -244,7 +170,9 @@ let _razorpayClient: Razorpay | null = null;
  * @throws RuntimeError if RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET missing
  */
 export function getRazorpayClient(): Razorpay {
-  assertNotBuildPhase('RazorpayClient');
+  if (isBuildPhase()) {
+    throw new RuntimeError('RazorpayClient cannot be initialized during build phase', 'BUILD_PHASE_ERROR');
+  }
 
   // Return cached instance
   if (_razorpayClient) {
@@ -280,10 +208,10 @@ export function getRazorpayClient(): Razorpay {
 
 /**
  * Reset all cached clients (for testing).
+ * Clears Supabase, Gemini, and Razorpay cached instances.
  */
 export function resetAllClients(): void {
-  _supabaseClient = null;
-  _supabaseAdminClient = null;
+  resetSupabaseClients();
   _geminiApiKey = null;
   _razorpayClient = null;
 }
@@ -303,24 +231,4 @@ export function validateEnvVars(): string[] {
   ];
 
   return required.filter(key => !process.env[key]);
-}
-
-/**
- * Helper to handle RuntimeError in API routes.
- * Returns a clean JSON response for client.
- */
-export function handleRuntimeError(error: unknown): Response {
-  if (error instanceof RuntimeError) {
-    console.error(`[RuntimeError] ${error.code}: ${error.message}`);
-    return Response.json(
-      { error: error.message, code: error.code },
-      { status: 500 }
-    );
-  }
-
-  console.error('[UnknownError]', error);
-  return Response.json(
-    { error: 'Internal server error' },
-    { status: 500 }
-  );
 }

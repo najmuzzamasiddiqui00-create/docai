@@ -138,35 +138,14 @@ export default function UploadBox({
       const documentId = uploadData.documentId || uploadData.document.id;
       console.log('🎯 Document ID extracted:', documentId);
 
-      // === STEP 2: TRIGGER INTERNAL PROCESSING ===
-      console.log('\n⚡ === STEP 2: TRIGGER INTERNAL PROCESSING ===');
-      console.log('   Calling /api/process-document...');
-      
-      // Trigger processing route (non-blocking)
-      fetch(`${getBaseUrl()}/api/process-document`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId }),
-        cache: 'no-store',
-        credentials: 'include',
-      })
-        .then(res => {
-          console.log('✅ Process-document triggered:', res.status);
-          if (!res.ok) {
-            console.error('⚠️ Process-document returned error status');
-          }
-        })
-        .catch(err => {
-          console.error('⚠️ Process-document call failed:', err.message);
-        });
+      // === SERVER HANDLES PROCESSING - Just wait for status updates ===
+      console.log('\n⚡ === SERVER PROCESSING INITIATED ===');
+      console.log('   Server automatically enqueued processing');
+      console.log('   Starting status polling...\n');
 
       // === TRANSITION TO QUEUED STATE ===
-      console.log('\n📋 === TRANSITIONING TO QUEUED STATE ===');
-      console.log('   Document is queued for internal processing');
-      console.log('   Starting polling in 500ms...\n');
-      
       setTimeout(() => {
-        console.log('⏰ 500ms delay complete, setting state to queued');
+        console.log('⏰ Setting state to queued');
         setUploadStage('queued');
         setProcessingDuration(0);
         
