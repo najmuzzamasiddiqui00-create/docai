@@ -36,7 +36,9 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
       pollingRef.current = setInterval(async () => {
         try {
           const response = await fetch(`${getBaseUrl()}/api/documents/${document.id}`, {
+            method: 'GET',
             cache: 'no-store',
+            credentials: 'include',
           });
           const data = await response.json();
           if (data.document && data.document.status !== localStatus) {
@@ -70,6 +72,7 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: document.id }),
         cache: 'no-store',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -101,6 +104,7 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: document.id, newName: newName.trim() }),
         cache: 'no-store',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -124,6 +128,7 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
       const response = await fetch(`${getBaseUrl()}/api/documents/${document.id}`, {
         method: 'DELETE',
         cache: 'no-store',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -149,6 +154,7 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: document.id }),
         cache: 'no-store',
+        credentials: 'include',
       });
 
       if (response.ok) {

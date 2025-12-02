@@ -37,7 +37,9 @@ export default function DocumentsPage() {
         : (process.env.NEXT_PUBLIC_APP_URL || '');
       
       const response = await fetch(`${baseUrl}/api/documents/list`, {
+        method: 'GET',
         cache: 'no-store',
+        credentials: 'include',
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache',

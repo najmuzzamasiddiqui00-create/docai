@@ -28,7 +28,9 @@ export default function DocumentDetailPage() {
         : (process.env.NEXT_PUBLIC_APP_URL || '');
       
       const response = await fetch(`${baseUrl}/api/documents/${params.id}`, {
+        method: 'GET',
         cache: 'no-store',
+        credentials: 'include',
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache',
@@ -87,6 +89,7 @@ export default function DocumentDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: params.id }),
         cache: 'no-store',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -121,6 +124,7 @@ export default function DocumentDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: params.id }),
         cache: 'no-store',
+        credentials: 'include',
       });
 
       if (response.ok) {

@@ -3,6 +3,9 @@
   "functions": {
     "app/api/**/*.ts": {
       "maxDuration": 60
+    },
+    "middleware.ts": {
+      "regions": ["iad1"]
     }
   },
   "headers": [
@@ -12,7 +15,8 @@
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "X-XSS-Protection", "value": "1; mode=block" }
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Access-Control-Allow-Credentials", "value": "true" }
       ]
     }
   ]

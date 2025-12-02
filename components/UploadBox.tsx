@@ -96,6 +96,7 @@ export default function UploadBox({
         method: 'POST',
         body: formData,
         cache: 'no-store',
+        credentials: 'include',
       });
 
       clearInterval(progressInterval);
@@ -138,6 +139,7 @@ export default function UploadBox({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId }),
         cache: 'no-store',
+        credentials: 'include',
       })
         .then(res => {
           console.log('✅ Process-document triggered:', res.status);
@@ -218,7 +220,7 @@ export default function UploadBox({
         const pollUrl = `${getBaseUrl()}/api/documents/${documentId}`;
         console.log(`   GET ${pollUrl}`);
         
-        const response = await fetch(pollUrl, { cache: 'no-store' });
+        const response = await fetch(pollUrl, { cache: 'no-store', credentials: 'include' });
         
         console.log(`   Response: ${response.status} ${response.statusText}`);
         

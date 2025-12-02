@@ -78,6 +78,7 @@ export default function SubscriptionButton({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ plan }),
+        credentials: 'include',
       });
 
       const orderData = await orderResponse.json();
@@ -118,6 +119,7 @@ export default function SubscriptionButton({
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
               }),
+              credentials: 'include',
             });
 
             const verifyData = await verifyResponse.json();
@@ -139,7 +141,9 @@ export default function SubscriptionButton({
               attempts++;
               
               try {
-                const statusResponse = await fetch('/api/subscription/status');
+                const statusResponse = await fetch('/api/subscription/status', {
+                  credentials: 'include',
+                });
                 const statusData = await statusResponse.json();
                 
                 if (statusData.isActive && statusData.plan === plan) {

@@ -24,7 +24,9 @@ export default function SubscriptionCard() {
 
   const loadSubscription = async () => {
     try {
-      const response = await fetch('/api/subscription/status');
+      const response = await fetch('/api/subscription/status', {
+        credentials: 'include',
+      });
       const data = await response.json();
       setSubscription(data);
     } catch (error) {

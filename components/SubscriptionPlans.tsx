@@ -72,6 +72,7 @@ export default function SubscriptionPlans() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan: planId }),
+        credentials: 'include',
       });
 
       const data = await response.json();
@@ -105,6 +106,7 @@ export default function SubscriptionPlans() {
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
             }),
+            credentials: 'include',
           });
 
           const verifyData = await verifyResponse.json();

@@ -65,7 +65,9 @@ export default function DashboardPage() {
   const loadDocuments = useCallback(async () => {
     try {
       const response = await fetch(`${getBaseUrl()}/api/documents/list`, {
+        method: 'GET',
         cache: 'no-store',
+        credentials: 'include',
         headers: {
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache',
@@ -126,6 +128,7 @@ export default function DashboardPage() {
     const deletePromise = fetch(`${getBaseUrl()}/api/documents/${id}`, {
       method: 'DELETE',
       cache: 'no-store',
+      credentials: 'include',
     });
 
     toast.promise(deletePromise, {
