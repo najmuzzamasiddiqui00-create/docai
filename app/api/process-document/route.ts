@@ -21,12 +21,14 @@ import { analyzeText } from '@/lib/gemini';
 import { createRequestLogger, logAndSanitize } from '@/lib/logger';
 import { checkRateLimit, RATE_LIMITS, rateLimitHeaders, getRateLimitKey } from '@/lib/rateLimit';
 import { headers } from 'next/headers';
+import { timingSafeEqual } from 'crypto';
 
 // Maximum text to store in database
 const MAX_STORED_TEXT = 10000;
 
 /**
  * Verify internal API secret for server-to-server calls
+ * Uses constant-time comparison to prevent timing attacks
  * Returns true if valid, false otherwise
  */
 function verifyInternalAuth(req: NextRequest): boolean {
@@ -36,14 +38,37 @@ function verifyInternalAuth(req: NextRequest): boolean {
   }
   
   const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+  
+  // Validate token is non-empty
+  if (!token || token.length === 0) {
+    return false;
+  }
+  
   const internalSecret = process.env.INTERNAL_API_SECRET;
   
-  if (!internalSecret) {
+  // Validate secret is configured and non-empty
+  if (!internalSecret || internalSecret.length === 0) {
     console.error('[process-document] INTERNAL_API_SECRET not configured');
     return false;
   }
   
-  return token === internalSecret;
+  // Use constant-time comparison to prevent timing attacks
+  try {
+    const tokenBuffer = Buffer.from(token, 'utf8');
+    const secretBuffer = Buffer.from(internalSecret, 'utf8');
+    
+    // Length mismatch - still use timingSafeEqual with padded buffers to avoid timing leak
+    if (tokenBuffer.length !== secretBuffer.length) {
+      // Compare against itself to maintain constant time, then return false
+      timingSafeEqual(secretBuffer, secretBuffer);
+      return false;
+    }
+    
+    return timingSafeEqual(tokenBuffer, secretBuffer);
+  } catch {
+    // Any error in comparison = reject
+    return false;
+  }
 }
 
 export async function POST(req: NextRequest) {
