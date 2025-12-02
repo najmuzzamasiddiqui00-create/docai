@@ -1,0 +1,47 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 Running pre-commit checks..."
+
+# Check for secrets in staged files
+echo "📝 Scanning for secrets..."
+
+# Run gitleaks on staged files only
+if command -v gitleaks &> /dev/null; then
+  gitleaks protect --staged --config=.gitleaks.toml --verbose --redact
+  if [ $? -ne 0 ]; then
+    echo "❌ GitLeaks detected secrets in your commit!"
+    echo "Please remove sensitive data before committing."
+    exit 1
+  fi
+  echo "✅ No secrets detected"
+else
+  echo "⚠️  GitLeaks not installed. Install with: brew install gitleaks"
+  echo "Falling back to simple pattern check..."
+  
+  # Simple grep fallback
+  if git diff --cached --name-only | grep -E '\.(ts|tsx|js|jsx)$' | xargs grep -l "AIza\|sk_test_\|sk_live_\|rzp_live_\|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" 2>/dev/null; then
+    echo "❌ Potential secrets found in staged files!"
+    echo "Please review and remove sensitive data."
+    exit 1
+  fi
+  echo "✅ Basic check passed"
+fi
+
+# Check TypeScript types
+echo "🔧 Type checking..."
+npx tsc --noEmit || {
+  echo "❌ TypeScript errors found!"
+  exit 1
+}
+echo "✅ Type check passed"
+
+# Run linter
+echo "🧹 Linting..."
+npm run lint || {
+  echo "❌ Linting errors found!"
+  exit 1
+}
+echo "✅ Lint passed"
+
+echo "✅ All pre-commit checks passed!"

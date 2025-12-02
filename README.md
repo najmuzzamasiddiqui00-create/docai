@@ -40,11 +40,26 @@ This application follows a clean, internal architecture:
 1. **Install dependencies**:
 ```bash
 npm install
+npm install -D husky  # For pre-commit hooks
 ```
 
-2. **Configure environment variables**:
+2. **Setup security system**:
+```bash
+npm run security:setup  # Configure pre-commit hooks
+```
 
-Copy `.env.local` and fill in your credentials:
+3. **Install GitLeaks** (for secret scanning):
+
+**Windows (with Chocolatey):**
+```bash
+choco install gitleaks
+```
+
+**Or download from:** https://github.com/gitleaks/gitleaks/releases
+
+4. **Configure environment variables**:
+
+Copy `.env.example` to `.env.local` and fill in your credentials:
 
 ```env
 # Clerk Authentication
@@ -73,21 +88,21 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 WEBHOOK_SECRET=your-webhook-secret
 ```
 
-3. **Set up Supabase Database**:
+5. **Set up Supabase Database**:
 
 Run the SQL scripts in your Supabase SQL Editor:
 
 a. First, run `supabase-schema.sql` to create tables and RLS policies
 b. Then, run `supabase-storage.sql` to set up the storage bucket
 
-4. **Configure Clerk Webhooks**:
+6. **Configure Clerk Webhooks**:
 
 - Go to Clerk Dashboard → Webhooks
 - Create a new endpoint: `https://your-domain.com/api/webhooks/clerk`
 - Subscribe to events: `user.created`, `user.updated`, `user.deleted`
 - Copy the signing secret to `WEBHOOK_SECRET` in `.env.local`
 
-5. **Configure Razorpay Webhooks**:
+7. **Configure Razorpay Webhooks**:
 
 - Go to Razorpay Dashboard → Webhooks
 - Create webhook: `https://your-domain.com/api/webhooks/razorpay`
@@ -135,11 +150,50 @@ v1/
 
 ## 🔒 Security
 
-- **Row Level Security (RLS)**: All Supabase tables have RLS policies ensuring users can only access their own data
-- **Authentication**: Clerk handles all authentication securely
-- **API Protection**: All API routes verify user identity via Clerk
-- **Webhook Verification**: Razorpay webhooks are signature-verified
-- **File Validation**: Upload size (10MB) and type restrictions enforced
+This application implements production-grade security measures:
+
+### Environment Variable Safety
+- ✅ Type-safe environment variable access (`lib/safeEnv.ts`)
+- ✅ Runtime validation with clear error messages
+- ✅ Build-phase detection to prevent Vercel crashes
+- ✅ Centralized configuration management
+
+### Secret Protection
+- ✅ GitLeaks integration for secret scanning
+- ✅ Pre-commit hooks prevent accidental secret commits
+- ✅ CI/CD workflows with automated security checks
+- ✅ `.env.local` never committed to Git
+
+### Data Security
+- ✅ **Row Level Security (RLS)**: All Supabase tables have RLS policies
+- ✅ **Authentication**: Clerk handles all authentication securely
+- ✅ **API Protection**: All API routes verify user identity
+- ✅ **Webhook Verification**: Razorpay webhooks are signature-verified
+- ✅ **File Validation**: Upload size (10MB) and type restrictions
+
+### Security Scripts
+
+```bash
+# Run complete security audit
+npm run security:audit
+
+# Scan for secrets in codebase
+npm run security:scan
+
+# Setup pre-commit hooks
+npm run security:setup
+
+# Pre-deployment validation
+npm run predeploy
+```
+
+### Security Monitoring
+
+- **Health Check**: `GET /api/health` - Validates environment and service health
+- **CI/CD**: Automated security scans on every push
+- **Documentation**: See `docs/security-playbook.md` for incident response
+
+For complete security documentation, see `SECURITY_IMPLEMENTATION_COMPLETE.md`.
 
 ## 💳 Subscription Plans
 
@@ -154,14 +208,49 @@ v1/
 - Priority processing
 - Email support
 
-### Premium Plan (₹999/month)
-- Unlimited uploads
-- Advanced document analysis
-- Instant processing
-- Priority support
-- API access
+## 🚢 Deployment
 
-## 🔄 How It Works
+### Pre-Deployment Checklist
+
+Before deploying to production:
+
+```bash
+# Run complete security audit
+npm run predeploy
+
+# This will:
+# - Run security audit
+# - Check for secrets
+# - Validate TypeScript
+# - Run linter
+# - Test build
+```
+
+### Deploy to Vercel
+
+1. **Setup Environment Variables in Vercel**:
+   - Go to Vercel Dashboard → Project → Settings → Environment Variables
+   - Add all variables from `.env.local` (see `.env.example` for reference)
+   - **Required secrets**: `CLERK_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_SECRET`, `GEMINI_API_KEY`, `WEBHOOK_SECRET`
+
+2. **Push code to GitHub**:
+```bash
+git add .
+git commit -m "feat: production-ready deployment"
+git push
+```
+
+3. **Import project in Vercel**:
+   - Connect your GitHub repository
+   - Vercel will auto-detect Next.js
+   - Deploy
+
+4. **Monitor CI/CD**:
+   - GitHub Actions will run security scans automatically
+   - Check workflow status in GitHub Actions tab
+
+5. **Verify Deployment**:
+   - Visit `https://your-domain.com/api/health` to check system health It Works
 
 1. **User Signs Up**: Clerk handles authentication
 2. **Webhook Sync**: Clerk webhook creates user profile in Supabase with free subscription

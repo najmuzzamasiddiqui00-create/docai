@@ -1,0 +1,90 @@
+# GitLeaks Configuration
+# Scans for hardcoded secrets, API keys, and credentials
+
+title = "DocAI Gitleaks Config"
+
+[allowlist]
+description = "Allowlist for false positives"
+paths = [
+  '''\.env\.example$''',
+  '''\.env\.template$''',
+  '''README\.md$''',
+  '''docs/.*\.md$''',
+]
+
+# Generic API Key Detection
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(api[_-]?key|apikey|access[_-]?key)["\s:=]+[a-zA-Z0-9_\-]{20,}'''
+tags = ["api", "key"]
+
+# Supabase Service Role Key
+[[rules]]
+id = "supabase-service-role"
+description = "Supabase Service Role Key"
+regex = '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZSI[a-zA-Z0-9_\-\.]+'''
+tags = ["supabase", "jwt", "service-role"]
+
+# Google/Gemini API Key
+[[rules]]
+id = "google-api-key"
+description = "Google/Gemini API Key"
+regex = '''AIza[0-9A-Za-z_\-]{35}'''
+tags = ["google", "gemini", "api"]
+
+# Razorpay Keys
+[[rules]]
+id = "razorpay-key"
+description = "Razorpay API Key"
+regex = '''rzp_(test|live)_[a-zA-Z0-9]{14}'''
+tags = ["razorpay", "payment"]
+
+# Razorpay Secret
+[[rules]]
+id = "razorpay-secret"
+description = "Razorpay Secret Key"
+regex = '''[a-zA-Z0-9]{20,32}(?=.*razorpay)'''
+tags = ["razorpay", "secret"]
+
+# Clerk Secret Key
+[[rules]]
+id = "clerk-secret"
+description = "Clerk Secret Key"
+regex = '''sk_test_[a-zA-Z0-9]{40,}'''
+tags = ["clerk", "auth"]
+
+# Private Keys (PEM format)
+[[rules]]
+id = "private-key"
+description = "Private Key"
+regex = '''-----BEGIN (RSA|DSA|EC|OPENSSH|PGP) PRIVATE KEY-----'''
+tags = ["private-key", "pem"]
+
+# AWS Keys
+[[rules]]
+id = "aws-access-key"
+description = "AWS Access Key"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["aws", "access-key"]
+
+# Generic Secret Pattern
+[[rules]]
+id = "generic-secret"
+description = "Generic Secret"
+regex = '''(?i)(secret|password|passwd|pwd|token)["\s:=]+[a-zA-Z0-9_\-!@#$%^&*()]{12,}'''
+tags = ["secret", "password"]
+
+# Database Connection Strings
+[[rules]]
+id = "database-connection"
+description = "Database Connection String"
+regex = '''(?i)(mongodb|mysql|postgresql|postgres)://[a-zA-Z0-9_\-]+:[a-zA-Z0-9_\-]+@'''
+tags = ["database", "connection-string"]
+
+# JWT Tokens
+[[rules]]
+id = "jwt-token"
+description = "JWT Token"
+regex = '''eyJ[a-zA-Z0-9_\-]+\.eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+'''
+tags = ["jwt", "token"]

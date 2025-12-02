@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server';
-import { createAdminClient } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { checkUserCredits, incrementCreditUsage } from '@/lib/credits';
+import { isBuildPhase } from '@/lib/safeEnv';
+import { safeErrorResponse } from '@/lib/security';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const FREE_CREDIT_LIMIT = 5; // Default free credits
@@ -34,42 +36,26 @@ export async function POST(req: Request) {
   const startTime = Date.now();
   
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Skip during build phase
+    if (isBuildPhase()) {
       return Response.json({ message: 'Skip during build' });
     }
 
     console.log('\n🚀 === UPLOAD REQUEST STARTED ===');
     console.log('⏰ Timestamp:', new Date().toISOString());
-    console.log('📍 Request URL:', req.url);
-    console.log('🔧 Request method:', req.method);
-    
-    // Log environment variables
-    console.log('\n🔐 Environment Variables Check:');
-    console.log('   NEXT_PUBLIC_SUPABASE_URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Set' : '❌ Missing');
-    console.log('   SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Set' : '❌ Missing');
-    console.log('   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:', process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? '✅ Set' : '❌ Missing');
-    console.log('   CLERK_SECRET_KEY:', process.env.CLERK_SECRET_KEY ? '✅ Set' : '❌ Missing');
-    
+
     // 1. Authentication check
     console.log('\n👤 Step 1: Authentication');
-    let userId;
-    try {
-      const authResult = await auth();
-      userId = authResult.userId;
-      console.log('   Auth result:', authResult);
-    } catch (authError: any) {
-      console.error('❌ Authentication failed:', authError.message);
-      return Response.json({ error: 'Authentication failed', details: authError.message }, { status: 401 });
-    }
+    const { userId } = await auth();
     
     if (!userId) {
       console.log('❌ No userId - Unauthorized request');
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return safeErrorResponse('Unauthorized', 401);
     }
 
     console.log(`✅ User authenticated: ${userId}`);
 
-    // 2. Credit check (server-side enforcement)
+    // 2. Check credit limits
     console.log('\n💳 Step 2: Credit Check');
     let creditCheck;
     try {
@@ -88,14 +74,7 @@ export async function POST(req: Request) {
     
     if (!creditCheck.allowed) {
       console.log(`❌ Credit limit reached: ${creditCheck.reason}`);
-      return Response.json(
-        { 
-          error: 'LIMIT_REACHED',
-          message: creditCheck.reason,
-          requiresSubscription: true,
-        },
-        { status: 403 }
-      );
+      return safeErrorResponse(creditCheck.reason || 'Credit limit reached', 403);
     }
 
     console.log(`✅ Credits available: ${creditCheck.creditsRemaining}`);
@@ -109,7 +88,7 @@ export async function POST(req: Request) {
       console.log('   FormData entries:', Array.from(formData.keys()));
     } catch (formDataError: any) {
       console.error('❌ Failed to parse FormData:', formDataError.message);
-      return Response.json({ error: 'Invalid form data', details: formDataError.message }, { status: 400 });
+      return safeErrorResponse('Invalid form data', 400);
     }
     
     const file = formData.get('file') as File;
@@ -117,7 +96,7 @@ export async function POST(req: Request) {
     if (!file) {
       console.error('❌ No file in FormData');
       console.error('   Available keys:', Array.from(formData.keys()));
-      return Response.json({ error: 'No file provided' }, { status: 400 });
+      return safeErrorResponse('No file provided', 400);
     }
     
     console.log('   File found:', file.name);
@@ -127,23 +106,14 @@ export async function POST(req: Request) {
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       console.log(`❌ File too large: ${file.size} bytes (max: ${MAX_FILE_SIZE})`);
-      return Response.json(
-        { error: `File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit` },
-        { status: 400 }
-      );
+      return safeErrorResponse(`File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`, 400);
     }
 
     // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
       console.log(`❌ Unsupported file type: ${file.type}`);
       console.log('   Allowed types:', ALLOWED_TYPES);
-      return Response.json(
-        { 
-          error: 'File type not supported',
-          supportedTypes: 'PDF, DOC, DOCX, TXT, CSV, Images',
-        },
-        { status: 400 }
-      );
+      return safeErrorResponse('File type not supported', 400);
     }
 
     console.log(`✅ File validated: ${file.name} (${file.size} bytes, ${file.type})`);
@@ -156,7 +126,7 @@ export async function POST(req: Request) {
       console.log('   ArrayBuffer created:', arrayBuffer.byteLength, 'bytes');
     } catch (bufferError: any) {
       console.error('❌ Failed to create ArrayBuffer:', bufferError.message);
-      return Response.json({ error: 'Failed to read file', details: bufferError.message }, { status: 500 });
+      return safeErrorResponse('Failed to read file', 500);
     }
     
     const buffer = Buffer.from(arrayBuffer);
@@ -170,7 +140,7 @@ export async function POST(req: Request) {
     console.log('   File path:', filePath);
     console.log('   Content type:', file.type);
 
-    const supabase = createAdminClient();
+    const supabase = await getSupabaseAdmin();
     let uploadData, uploadError;
     try {
       const uploadResult = await supabase.storage
@@ -187,20 +157,13 @@ export async function POST(req: Request) {
     } catch (storageError: any) {
       console.error('❌ Storage upload exception:', storageError.message);
       console.error('   Error details:', storageError);
-      return Response.json(
-        { error: 'Failed to upload file to storage', details: storageError.message },
-        { status: 500 }
-      );
+      return safeErrorResponse('Failed to upload file to storage', 500);
     }
 
     if (uploadError || !uploadData) {
       console.error('❌ Storage upload failed:', uploadError);
       console.error('   Error message:', uploadError?.message);
-      console.error('   Error details:', uploadError);
-      return Response.json(
-        { error: 'Failed to upload file to storage', details: uploadError?.message || 'Unknown error' },
-        { status: 500 }
-      );
+      return safeErrorResponse('Failed to upload file to storage', 500);
     }
 
     console.log(`✅ File uploaded to storage: ${uploadData.path}`);
@@ -255,34 +218,27 @@ export async function POST(req: Request) {
       console.error('   Error details:', dbException);
       // Clean up uploaded file
       await supabase.storage.from('documents').remove([filePath]);
-      return Response.json(
-        { error: 'Failed to create document record', details: dbException.message },
-        { status: 500 }
-      );
+      return safeErrorResponse('Failed to create document record', 500);
     }
 
     if (dbError || !document) {
       console.error('❌ Database insert failed:', dbError);
       console.error('   Error code:', dbError?.code);
       console.error('   Error message:', dbError?.message);
-      console.error('   Error details:', JSON.stringify(dbError, null, 2));
       // Clean up uploaded file
       await supabase.storage.from('documents').remove([filePath]);
-      return Response.json(
-        { error: 'Failed to create document record', details: dbError?.message || 'Unknown error' },
-        { status: 500 }
-      );
+      return safeErrorResponse('Failed to create document record', 500);
     }
 
-    console.log(`✅ Document created: ${document.id} with status="queued"`);
+    console.log(`✅ Document record created: ${document.id}`);
 
-    // 7. Increment credit usage (don't let this fail the upload)
+    // 7. Increment credit usage
     console.log('\n💳 Step 7: Increment Credit Usage');
     try {
       await incrementCreditUsage(userId);
-      console.log(`✅ Credit usage incremented`);
+      console.log('   Credit usage incremented');
     } catch (creditError: any) {
-      console.error('⚠️ Failed to increment credit usage:', creditError.message);
+      console.error('❌ Failed to increment credit usage:', creditError.message);
       console.error('   Continuing with upload...');
       // Don't fail the upload - credit tracking is not critical
     }
@@ -322,14 +278,6 @@ export async function POST(req: Request) {
     console.error(error.stack);
     console.error('='.repeat(60) + '\n');
     
-    return Response.json(
-      { 
-        error: 'Internal server error', 
-        message: error.message,
-        details: error.toString(),
-        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-      },
-      { status: 500 }
-    );
+    return safeErrorResponse('Internal server error', 500);
   }
 }
