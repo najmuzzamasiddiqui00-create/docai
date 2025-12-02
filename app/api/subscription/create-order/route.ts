@@ -1,5 +1,5 @@
 import { auth } from '@clerk/nextjs/server';
-import { razorpay } from '@/lib/razorpay';
+import { getRazorpay } from '@/lib/razorpay';
 import { createAdminClient } from '@/lib/supabase';
 
 export async function POST(req: Request) {
@@ -55,6 +55,7 @@ export async function POST(req: Request) {
     // Create Razorpay order with proper error handling
     let order;
     try {
+      const razorpay = getRazorpay();
       order = await razorpay.orders.create({
         amount: selectedPlan.amount,
         currency: 'INR',
