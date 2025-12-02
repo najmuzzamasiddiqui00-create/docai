@@ -1,9 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
-import { createAdminClient } from '@/lib/supabase';
+import { getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 
 export async function GET() {
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Build phase guard
+    if (isBuildPhase()) {
       return Response.json({ message: 'Skip during build' });
     }
 
@@ -13,7 +14,7 @@ export async function GET() {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const supabase = createAdminClient();
+    const supabase = getSupabaseAdminClient();
     const { data: profile, error } = await supabase
       .from('user_profiles')
       .select('*')
@@ -44,7 +45,8 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Build phase guard
+    if (isBuildPhase()) {
       return Response.json({ message: 'Skip during build' });
     }
 
@@ -57,7 +59,7 @@ export async function PUT(req: Request) {
     const body = await req.json();
     const { full_name } = body;
 
-    const supabase = createAdminClient();
+    const supabase = getSupabaseAdminClient();
     const { data, error } = await supabase
       .from('user_profiles')
       .update({ full_name })

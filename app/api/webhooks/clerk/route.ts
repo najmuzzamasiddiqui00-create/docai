@@ -1,17 +1,19 @@
 import { Webhook } from 'svix';
 import { headers } from 'next/headers';
 import { WebhookEvent } from '@clerk/nextjs/server';
-import { createAdminClient } from '@/lib/supabase';
+import { getSupabaseAdminClient, isBuildPhase } from '@/lib/runtime';
 
 export async function POST(req: Request) {
-  if (process.env.NEXT_PHASE === 'phase-production-build') {
+  // Build phase guard
+  if (isBuildPhase()) {
     return new Response('Skip during build', { status: 200 });
   }
 
   const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
   if (!WEBHOOK_SECRET) {
-    throw new Error('Please add WEBHOOK_SECRET from Clerk Dashboard to .env');
+    console.error('WEBHOOK_SECRET not configured');
+    return new Response('Webhook secret missing', { status: 500 });
   }
 
   const headerPayload = headers();
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
   }
 
   const eventType = evt.type;
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   if (eventType === 'user.created') {
     const { id, email_addresses, first_name, last_name } = evt.data;

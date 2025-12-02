@@ -1,5 +1,8 @@
 // Internal Gemini API Helper - Single Model (gemini-2.5-pro)
-// Fixed endpoint: https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent
+// Uses runtime-safe client from /lib/runtime.ts
+// ZERO top-level initialization
+
+import { getGeminiApiKey, isBuildPhase, RuntimeError } from './runtime';
 
 export interface GeminiAnalysisResult {
   summary: string;
@@ -15,16 +18,21 @@ export interface GeminiAnalysisResult {
 /**
  * Analyze document text using Gemini 2.5 Pro (latest stable model)
  * Single REST call; no dynamic model discovery or fallbacks
+ * 
+ * @throws RuntimeError if GEMINI_API_KEY missing
  */
 export async function analyzeDocument(text: string): Promise<GeminiAnalysisResult> {
+  // Build phase guard
+  if (isBuildPhase()) {
+    throw new RuntimeError('Cannot analyze during build phase', 'BUILD_PHASE_ERROR');
+  }
+
   console.log('🤖 Starting Gemini analysis...');
   console.log('   Text length:', text.length, 'characters');
   console.log('   Preview:', text.substring(0, 100).replace(/\n/g, ' '));
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY environment variable is not set');
-  }
+  // Get API key at runtime (throws if missing)
+  const apiKey = getGeminiApiKey();
 
   try {
     // Create structured analysis prompt

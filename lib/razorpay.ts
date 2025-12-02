@@ -1,45 +1,29 @@
-import Razorpay from 'razorpay';
-import crypto from 'crypto';
-
-// Razorpay client - created at runtime only, not during build
-let razorpayInstance: Razorpay | null = null;
-
 /**
- * Get Razorpay client instance (runtime only)
- * Uses singleton pattern for efficiency
+ * Razorpay Client Wrappers
+ * 
+ * Re-exports runtime-safe Razorpay client from /lib/runtime.ts
+ * ZERO top-level initialization - all clients created at request time.
  */
-export function getRazorpay(): Razorpay {
-  // Skip during build phase
-  if (process.env.NEXT_PHASE === 'phase-production-build') {
-    throw new Error('Razorpay client not available during build');
-  }
 
-  if (!razorpayInstance) {
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      throw new Error('Razorpay credentials are not configured. Please check RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in your environment variables.');
-    }
+import crypto from 'crypto';
+export { getRazorpayClient as getRazorpay, getRazorpayClient, isBuildPhase } from './runtime';
 
-    razorpayInstance = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    });
-  }
-
-  return razorpayInstance;
-}
-
-// Legacy export for backwards compatibility - DO NOT USE at module level
-// Use getRazorpay() instead
-export const razorpay = null as unknown as Razorpay;
+// Legacy null export for backward compatibility - DO NOT USE
+export const razorpay = null;
 
 export function verifyRazorpaySignature(
   orderId: string,
   paymentId: string,
   signature: string
 ): boolean {
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keySecret) {
+    throw new Error('RAZORPAY_KEY_SECRET not configured');
+  }
+
   const text = `${orderId}|${paymentId}`;
   const generatedSignature = crypto
-    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+    .createHmac('sha256', keySecret)
     .update(text)
     .digest('hex');
 
@@ -50,8 +34,13 @@ export function verifyWebhookSignature(
   payload: string,
   signature: string
 ): boolean {
+  const webhookSecret = process.env.WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    throw new Error('WEBHOOK_SECRET not configured');
+  }
+
   const expectedSignature = crypto
-    .createHmac('sha256', process.env.WEBHOOK_SECRET!)
+    .createHmac('sha256', webhookSecret)
     .update(payload)
     .digest('hex');
 

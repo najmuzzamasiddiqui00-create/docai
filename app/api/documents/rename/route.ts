@@ -1,9 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
-import { createAdminClient } from '@/lib/supabase';
+import { getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 
 export async function POST(req: Request) {
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Build phase guard
+    if (isBuildPhase()) {
       return Response.json({ message: 'Skip during build' });
     }
 
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     console.log(`\n✏️ === RENAME DOCUMENT: ${documentId} ===`);
     console.log(`   New name: ${newName}`);
 
-    const supabase = createAdminClient();
+    const supabase = getSupabaseAdminClient();
     // Update document name
     const { error: updateError } = await supabase
       .from('documents')

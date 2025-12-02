@@ -1,4 +1,4 @@
-import { createAdminClient } from './supabase';
+import { getSupabaseAdminClient, isBuildPhase } from './runtime';
 
 // Credit system constants
 export const FREE_CREDIT_LIMIT = 5;
@@ -26,8 +26,13 @@ export interface CreditCheckResult {
  * - Free plan with credits >= 5: Blocked - must subscribe
  */
 export async function checkUserCredits(clerkUserId: string): Promise<CreditCheckResult> {
+  // Build phase guard
+  if (isBuildPhase()) {
+    return { allowed: true, creditsRemaining: FREE_CREDIT_LIMIT, requiresSubscription: false };
+  }
+
   try {
-    const supabaseAdmin = createAdminClient();
+    const supabaseAdmin = getSupabaseAdminClient();
     // Fetch user profile from database (server-side only)
     const { data: user, error } = await supabaseAdmin
       .from('user_profiles')
@@ -106,8 +111,13 @@ export async function checkUserCredits(clerkUserId: string): Promise<CreditCheck
  * This is called AFTER successful document upload/processing
  */
 export async function incrementCreditUsage(clerkUserId: string): Promise<void> {
+  // Build phase guard
+  if (isBuildPhase()) {
+    return;
+  }
+
   try {
-    const supabaseAdmin = createAdminClient();
+    const supabaseAdmin = getSupabaseAdminClient();
     // Fetch current user data
     const { data: user, error: fetchError } = await supabaseAdmin
       .from('user_profiles')
@@ -157,8 +167,13 @@ export async function createUserProfile(
   email?: string, 
   fullName?: string
 ): Promise<void> {
+  // Build phase guard
+  if (isBuildPhase()) {
+    return;
+  }
+
   try {
-    const supabaseAdmin = createAdminClient();
+    const supabaseAdmin = getSupabaseAdminClient();
     const { error } = await supabaseAdmin
       .from('user_profiles')
       .insert({
@@ -190,8 +205,13 @@ export async function activateSubscription(
   clerkUserId: string, 
   plan: 'pro' | 'premium'
 ): Promise<void> {
+  // Build phase guard
+  if (isBuildPhase()) {
+    return;
+  }
+
   try {
-    const supabaseAdmin = createAdminClient();
+    const supabaseAdmin = getSupabaseAdminClient();
     const { error } = await supabaseAdmin
       .from('user_profiles')
       .update({
@@ -217,8 +237,18 @@ export async function activateSubscription(
  * Get user credit status for display
  */
 export async function getUserCreditStatus(clerkUserId: string) {
+  // Build phase guard
+  if (isBuildPhase()) {
+    return {
+      creditsUsed: 0,
+      creditsRemaining: FREE_CREDIT_LIMIT,
+      plan: 'free',
+      hasUnlimitedAccess: false,
+    };
+  }
+
   try {
-    const supabase = createAdminClient();
+    const supabase = getSupabaseAdminClient();
     const { data: user, error } = await supabase
       .from('user_profiles')
       .select('free_credits_used, plan, subscription_status')

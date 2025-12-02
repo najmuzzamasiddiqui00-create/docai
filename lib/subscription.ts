@@ -1,9 +1,14 @@
 import { auth } from '@clerk/nextjs/server';
-import { createAdminClient } from './supabase';
+import { getSupabaseAdminClient, isBuildPhase } from './runtime';
 import { Subscription } from '@/types';
 
 export async function getUserSubscription(userId: string): Promise<Subscription | null> {
-  const supabase = createAdminClient();
+  // Build phase guard
+  if (isBuildPhase()) {
+    return null;
+  }
+
+  const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from('subscriptions')
     .select('*')
@@ -36,7 +41,7 @@ export async function checkSubscriptionStatus(userId: string): Promise<{
   // Check if subscription is expired
   if (subscription.end_date && new Date(subscription.end_date) < new Date()) {
     // Update subscription status to expired
-    const supabase = createAdminClient();
+    const supabase = getSupabaseAdminClient();
     await supabase
       .from('subscriptions')
       .update({ status: 'expired' })

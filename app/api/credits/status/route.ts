@@ -1,9 +1,11 @@
 import { auth } from '@clerk/nextjs/server';
 import { getUserCreditStatus } from '@/lib/credits';
+import { isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 
 export async function GET() {
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Build phase guard
+    if (isBuildPhase()) {
       return Response.json({ message: 'Skip during build' });
     }
     const { userId } = await auth();

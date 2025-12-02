@@ -1,9 +1,11 @@
 import { auth } from '@clerk/nextjs/server';
 import { checkSubscriptionStatus } from '@/lib/subscription';
+import { isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 
 export async function GET() {
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Build phase guard
+    if (isBuildPhase()) {
       return Response.json({ message: 'Skip during build' });
     }
 
@@ -16,8 +18,8 @@ export async function GET() {
     const status = await checkSubscriptionStatus(userId);
 
     return Response.json(status);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error checking subscription:', error);
-    return Response.json({ error: 'Failed to check subscription' }, { status: 500 });
+    return handleRuntimeError(error);
   }
 }

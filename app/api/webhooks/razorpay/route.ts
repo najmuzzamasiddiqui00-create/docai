@@ -1,12 +1,13 @@
 import { headers } from 'next/headers';
 import { verifyWebhookSignature } from '@/lib/razorpay';
-import { createAdminClient } from '@/lib/supabase';
+import { getSupabaseAdminClient, isBuildPhase } from '@/lib/runtime';
 import { RazorpayWebhookEvent } from '@/types';
 import { activateSubscription } from '@/lib/credits';
 
 export async function POST(req: Request) {
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Build phase guard
+    if (isBuildPhase()) {
       return new Response('Skip during build', { status: 200 });
     }
 
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
 
 async function handlePaymentCaptured(event: RazorpayWebhookEvent) {
   const payment = event.payload.payment.entity;
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   // Find subscription by order_id
   const { data: subscription } = await supabase
@@ -100,7 +101,7 @@ async function handlePaymentCaptured(event: RazorpayWebhookEvent) {
 
 async function handlePaymentFailed(event: RazorpayWebhookEvent) {
   const payment = event.payload.payment.entity;
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   const { data: subscription } = await supabase
     .from('subscriptions')
@@ -118,7 +119,7 @@ async function handlePaymentFailed(event: RazorpayWebhookEvent) {
 
 async function handleSubscriptionActivated(event: RazorpayWebhookEvent) {
   const subscription = event.payload.subscription?.entity;
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   if (subscription) {
     // Update subscription in database
@@ -148,7 +149,7 @@ async function handleSubscriptionActivated(event: RazorpayWebhookEvent) {
 async function handleSubscriptionCharged(event: RazorpayWebhookEvent) {
   // Extend subscription period on successful charge
   const subscription = event.payload.subscription?.entity;
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   if (subscription) {
     await supabase
@@ -162,7 +163,7 @@ async function handleSubscriptionCharged(event: RazorpayWebhookEvent) {
 
 async function handleSubscriptionCancelled(event: RazorpayWebhookEvent) {
   const subscription = event.payload.subscription?.entity;
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   if (subscription) {
     // Update subscription status
@@ -195,7 +196,7 @@ async function handleSubscriptionCancelled(event: RazorpayWebhookEvent) {
 
 async function handleSubscriptionCompleted(event: RazorpayWebhookEvent) {
   const subscription = event.payload.subscription?.entity;
-  const supabase = createAdminClient();
+  const supabase = getSupabaseAdminClient();
 
   if (subscription) {
     await supabase

@@ -1,10 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
-import { getRazorpay } from '@/lib/razorpay';
-import { createAdminClient } from '@/lib/supabase';
+import { getRazorpayClient, getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 
 export async function POST(req: Request) {
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Build phase guard
+    if (isBuildPhase()) {
       return Response.json({ message: 'Skip during build' });
     }
 
@@ -37,12 +37,6 @@ export async function POST(req: Request) {
 
     const selectedPlan = planConfigs[plan as keyof typeof planConfigs];
 
-    // Validate Razorpay configuration
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      console.error('Razorpay credentials missing in environment variables');
-      return Response.json({ error: 'Payment system not configured' }, { status: 500 });
-    }
-
     console.log(`Creating Razorpay order for user: ${userId}, plan: ${plan} (${selectedPlan.name})`);
 
     // Generate short receipt ID (max 40 chars for Razorpay)
@@ -55,7 +49,7 @@ export async function POST(req: Request) {
     // Create Razorpay order with proper error handling
     let order;
     try {
-      const razorpay = getRazorpay();
+      const razorpay = getRazorpayClient();
       order = await razorpay.orders.create({
         amount: selectedPlan.amount,
         currency: 'INR',
@@ -82,7 +76,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const supabase = createAdminClient();
+    const supabase = getSupabaseAdminClient();
     // Create or update subscription in database
     const { data: existingSubscription } = await supabase
       .from('subscriptions')

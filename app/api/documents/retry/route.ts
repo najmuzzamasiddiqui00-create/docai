@@ -1,9 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
-import { createAdminClient } from '@/lib/supabase';
+import { getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 
 export async function POST(req: Request) {
   try {
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
+    // Build phase guard
+    if (isBuildPhase()) {
       return Response.json({ message: 'Skip during build' });
     }
 
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
 
     console.log(`\n🔄 === RETRY PROCESSING: ${documentId} ===`);
 
-    const supabase = createAdminClient();
+    const supabase = getSupabaseAdminClient();
     // Get document
     const { data: document, error: fetchError } = await supabase
       .from('documents')
