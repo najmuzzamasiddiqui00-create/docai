@@ -28,9 +28,7 @@ if [ ! -f ".env.production" ]; then
 fi
 
 # Check if env file has empty values
-# Check if env file has empty values
 EMPTY_VARS=0
-while IFS='=' read -r key value; do
 while IFS='=' read -r key value; do
     # Skip comments and empty lines
     [[ $key =~ ^#.*$ ]] && continue
