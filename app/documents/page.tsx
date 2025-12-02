@@ -1,12 +1,16 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import toast, { Toaster } from 'react-hot-toast';
 import { Document, DocumentStatus, DocumentSortOption } from '@/types';
 import DocumentCard from '@/components/DocumentCard';
+
+// Force dynamic - no static caching
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default function DocumentsPage() {
   const { isLoaded, isSignedIn } = useUser();
@@ -16,6 +20,7 @@ export default function DocumentsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<DocumentStatus | 'all'>('all');
   const [sortBy, setSortBy] = useState<DocumentSortOption>('newest');
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -23,20 +28,37 @@ export default function DocumentsPage() {
     }
   }, [isLoaded, isSignedIn, router]);
 
-  useEffect(() => {
-    if (isSignedIn) {
-      loadDocuments();
-    }
-  }, [isSignedIn]);
-
-  const loadDocuments = async () => {
+  // Load documents with cache-busting
+  const loadDocuments = useCallback(async () => {
     try {
-      setLoading(true);
-      const response = await fetch('/api/documents/list');
+      // Use absolute URL with cache busting
+      const baseUrl = typeof window !== 'undefined' 
+        ? window.location.origin 
+        : (process.env.NEXT_PUBLIC_APP_URL || '');
+      
+      const response = await fetch(`${baseUrl}/api/documents/list`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+      });
+      
       const data = await response.json();
 
       if (response.ok) {
         setDocuments(data.documents || []);
+        
+        // Check if any documents are still processing
+        const hasProcessing = (data.documents || []).some(
+          (doc: Document) => doc.status === 'processing' || doc.status === 'queued'
+        );
+        
+        // If no processing documents, stop polling
+        if (!hasProcessing && pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
       } else {
         toast.error('Failed to load documents');
       }
@@ -46,7 +68,25 @@ export default function DocumentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isSignedIn) {
+      loadDocuments();
+      
+      // Set up polling for processing documents (every 5 seconds)
+      pollingRef.current = setInterval(() => {
+        loadDocuments();
+      }, 5000);
+    }
+    
+    // Cleanup on unmount
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [isSignedIn, loadDocuments]);
 
   // Filter and sort documents
   const filteredAndSortedDocuments = useMemo(() => {

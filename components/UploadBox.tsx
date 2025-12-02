@@ -42,6 +42,13 @@ export default function UploadBox({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const processingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Get base URL for API calls
+  const getBaseUrl = () => {
+    return typeof window !== 'undefined' 
+      ? window.location.origin 
+      : (process.env.NEXT_PUBLIC_APP_URL || '');
+  };
+
   const validateFile = (file: File): string | null => {
     // Check file size
     const maxSize = maxSizeMB * 1024 * 1024;
@@ -85,9 +92,10 @@ export default function UploadBox({
       const formData = new FormData();
       formData.append('file', file);
 
-      const uploadResponse = await fetch('/api/upload', {
+      const uploadResponse = await fetch(`${getBaseUrl()}/api/upload`, {
         method: 'POST',
         body: formData,
+        cache: 'no-store',
       });
 
       clearInterval(progressInterval);
@@ -125,10 +133,11 @@ export default function UploadBox({
       console.log('   Calling /api/process-document...');
       
       // Trigger processing route (non-blocking)
-      fetch('/api/process-document', {
+      fetch(`${getBaseUrl()}/api/process-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId }),
+        cache: 'no-store',
       })
         .then(res => {
           console.log('✅ Process-document triggered:', res.status);
@@ -206,10 +215,10 @@ export default function UploadBox({
       console.log(`\n🔄 Poll #${attempts}/${maxAttempts} - Fetching status...`);
       
       try {
-        const pollUrl = `/api/documents/${documentId}`;
+        const pollUrl = `${getBaseUrl()}/api/documents/${documentId}`;
         console.log(`   GET ${pollUrl}`);
         
-        const response = await fetch(pollUrl);
+        const response = await fetch(pollUrl, { cache: 'no-store' });
         
         console.log(`   Response: ${response.status} ${response.statusText}`);
         

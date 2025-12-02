@@ -2,9 +2,12 @@
 // NO Edge Functions, NO n8n - Pure Next.js backend processing
 // ZERO top-level initialization - all clients created at request time
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 import { extractText } from '@/lib/text-extractor';
 import { analyzeTextWithGemini } from '@/lib/gemini';
+import { checkRateLimit, RATE_LIMITS, rateLimitHeaders, getRateLimitKey } from '@/lib/rateLimit';
+import { headers } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   console.log('\n🔄 === INTERNAL PROCESSING STARTED ===');
@@ -16,6 +19,27 @@ export async function POST(req: NextRequest) {
     // Build phase guard
     if (isBuildPhase()) {
       return NextResponse.json({ message: 'Skip during build' });
+    }
+    
+    // Authentication check
+    const { userId } = await auth();
+    if (!userId) {
+      console.log('❌ Unauthorized request');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    // Rate limiting
+    const headersList = headers();
+    const ip = headersList.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+    const rateLimitKey = getRateLimitKey(userId, ip, 'process');
+    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.process);
+    
+    if (!rateLimit.allowed) {
+      console.log(`❌ Rate limit exceeded for ${rateLimitKey}`);
+      return NextResponse.json(
+        { error: 'Too many requests. Please wait.', retryAfter: rateLimit.retryAfter },
+        { status: 429, headers: rateLimitHeaders(rateLimit) }
+      );
     }
     
     // Parse request body

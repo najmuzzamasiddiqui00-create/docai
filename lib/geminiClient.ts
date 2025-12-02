@@ -46,7 +46,7 @@ export async function analyzeTextWithGemini(
     });
   }
 
-  const endpoint = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash-exp:generateContent';
+  const endpoint = 'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent';
   
   const prompt = `Analyze the following text and provide a structured JSON response with:
 - summary: A concise 2-3 sentence summary

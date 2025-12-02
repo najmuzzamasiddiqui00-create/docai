@@ -4,11 +4,15 @@ import { UserButton } from '@clerk/nextjs';
 import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
 import UploadBox from '@/components/UploadBox';
 import SubscriptionCard from '@/components/SubscriptionCard';
+
+// Force dynamic - no static caching
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 interface Document {
   id: string;
@@ -30,26 +34,74 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Get base URL for API calls
+  const getBaseUrl = () => {
+    return typeof window !== 'undefined' 
+      ? window.location.origin 
+      : (process.env.NEXT_PUBLIC_APP_URL || '');
+  };
 
   useEffect(() => {
     if (isLoaded && !user) {
       router.push('/sign-in');
     } else if (isLoaded && user) {
       loadDocuments();
+      
+      // Set up polling for processing documents (every 5 seconds)
+      pollingRef.current = setInterval(() => {
+        loadDocuments();
+      }, 5000);
     }
+    
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
   }, [isLoaded, user, router]);
 
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
-      const response = await fetch('/api/documents/list');
+      const response = await fetch(`${getBaseUrl()}/api/documents/list`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+      });
       const data = await response.json();
-      setDocuments(data.documents || []);
+      
+      // Parse processed_output if it's a string
+      const docs = (data.documents || []).map((doc: any) => {
+        let processedOutput = doc.processed_output;
+        if (processedOutput && typeof processedOutput === 'string') {
+          try {
+            processedOutput = JSON.parse(processedOutput);
+          } catch {
+            processedOutput = null;
+          }
+        }
+        return { ...doc, processed_output: processedOutput };
+      });
+      
+      setDocuments(docs);
+      
+      // Stop polling if no documents are processing
+      const hasProcessing = docs.some(
+        (doc: Document) => doc.status === 'processing' || doc.status === 'queued'
+      );
+      if (!hasProcessing && pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
     } catch (error) {
       console.error('Failed to load documents:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleUploadStart = (file: File) => {
     console.log('Upload started:', file.name);
@@ -71,8 +123,9 @@ export default function DashboardPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
-    const deletePromise = fetch(`/api/documents/${id}`, {
+    const deletePromise = fetch(`${getBaseUrl()}/api/documents/${id}`, {
       method: 'DELETE',
+      cache: 'no-store',
     });
 
     toast.promise(deletePromise, {

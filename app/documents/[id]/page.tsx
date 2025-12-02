@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
 import { Document } from '@/types';
+
+// Force dynamic - no static caching
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default function DocumentDetailPage() {
   const params = useParams();
@@ -13,18 +17,36 @@ export default function DocumentDetailPage() {
   const [document, setDocument] = useState<Document | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFullText, setShowFullText] = useState(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    loadDocument();
-  }, [params.id]);
-
-  const loadDocument = async () => {
+  // Load document with cache-busting
+  const loadDocument = useCallback(async () => {
     try {
-      const response = await fetch(`/api/documents/${params.id}`);
+      // Use absolute URL with cache busting
+      const baseUrl = typeof window !== 'undefined' 
+        ? window.location.origin 
+        : (process.env.NEXT_PUBLIC_APP_URL || '');
+      
+      const response = await fetch(`${baseUrl}/api/documents/${params.id}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+      });
+      
       const data = await response.json();
       
       if (response.ok) {
         setDocument(data.document);
+        
+        // Stop polling if processing is complete or failed
+        if (data.document.status === 'completed' || data.document.status === 'failed') {
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+        }
       } else {
         toast.error(data.error || 'Failed to load document');
         router.push('/dashboard');
@@ -35,14 +57,36 @@ export default function DocumentDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id, router]);
+
+  // Initial load and polling setup
+  useEffect(() => {
+    loadDocument();
+    
+    // Set up polling for processing documents (every 3 seconds)
+    pollingRef.current = setInterval(() => {
+      loadDocument();
+    }, 3000);
+    
+    // Cleanup on unmount
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+      }
+    };
+  }, [loadDocument]);
 
   const handleDownloadReport = async () => {
     try {
-      const response = await fetch('/api/documents/export', {
+      const baseUrl = typeof window !== 'undefined' 
+        ? window.location.origin 
+        : (process.env.NEXT_PUBLIC_APP_URL || '');
+        
+      const response = await fetch(`${baseUrl}/api/documents/export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: params.id }),
+        cache: 'no-store',
       });
 
       if (response.ok) {
@@ -68,10 +112,15 @@ export default function DocumentDetailPage() {
 
   const handleDownloadFile = async () => {
     try {
-      const response = await fetch('/api/documents/download', {
+      const baseUrl = typeof window !== 'undefined' 
+        ? window.location.origin 
+        : (process.env.NEXT_PUBLIC_APP_URL || '');
+        
+      const response = await fetch(`${baseUrl}/api/documents/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: params.id }),
+        cache: 'no-store',
       });
 
       if (response.ok) {
@@ -111,8 +160,19 @@ export default function DocumentDetailPage() {
     );
   }
 
-  // Safe analysis reference
-  const analysis: any = (document as any).processed_output || {};
+  // Safe analysis reference - parse if string
+  let analysis: any = {};
+  if (document.processed_output) {
+    if (typeof document.processed_output === 'string') {
+      try {
+        analysis = JSON.parse(document.processed_output);
+      } catch {
+        analysis = {};
+      }
+    } else {
+      analysis = document.processed_output;
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50">
@@ -379,7 +439,7 @@ export default function DocumentDetailPage() {
             </motion.div>
           )}
 
-          {/* Processing State */}
+          {/* Processing State with Auto-Refresh Notice */}
           {document.status === 'processing' && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -388,11 +448,12 @@ export default function DocumentDetailPage() {
             >
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-yellow-500 border-t-transparent mx-auto mb-4"></div>
               <h2 className="text-2xl font-bold text-yellow-900 mb-2">Processing in Progress</h2>
-              <p className="text-yellow-700">Your document is being analyzed. This may take a few moments...</p>
+              <p className="text-yellow-700 mb-2">Your document is being analyzed. This may take a few moments...</p>
+              <p className="text-yellow-600 text-sm">⏱️ This page auto-refreshes every 3 seconds</p>
             </motion.div>
           )}
 
-          {/* Queued State */}
+          {/* Queued State with Auto-Refresh Notice */}
           {document.status === 'queued' && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -400,7 +461,8 @@ export default function DocumentDetailPage() {
               className="bg-blue-50 border border-blue-200 rounded-2xl p-8 text-center"
             >
               <h2 className="text-2xl font-bold text-blue-900 mb-2">Queued for Processing</h2>
-              <p className="text-blue-700">Your document is queued and will be processed shortly...</p>
+              <p className="text-blue-700 mb-2">Your document is queued and will be processed shortly...</p>
+              <p className="text-blue-600 text-sm">⏱️ This page auto-refreshes every 3 seconds</p>
             </motion.div>
           )}
         </motion.div>

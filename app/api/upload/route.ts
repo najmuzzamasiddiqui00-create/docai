@@ -1,6 +1,8 @@
 import { auth } from '@clerk/nextjs/server';
 import { getSupabaseAdminClient, isBuildPhase, handleRuntimeError } from '@/lib/runtime';
 import { checkUserCredits, incrementCreditUsage } from '@/lib/credits';
+import { checkRateLimit, RATE_LIMITS, rateLimitHeaders, getRateLimitKey } from '@/lib/rateLimit';
+import { headers } from 'next/headers';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const FREE_CREDIT_LIMIT = 5; // Default free credits
@@ -52,6 +54,24 @@ export async function POST(req: Request) {
     }
 
     console.log(`✅ User authenticated: ${userId}`);
+
+    // 1.5 Rate limiting check
+    console.log('\n🚦 Step 1.5: Rate Limit Check');
+    const headersList = headers();
+    const ip = headersList.get('x-forwarded-for')?.split(',')[0] || 
+               headersList.get('x-real-ip') || 
+               'unknown';
+    const rateLimitKey = getRateLimitKey(userId, ip, 'upload');
+    const rateLimit = checkRateLimit(rateLimitKey, RATE_LIMITS.upload);
+    
+    if (!rateLimit.allowed) {
+      console.log(`❌ Rate limit exceeded for ${rateLimitKey}`);
+      return Response.json(
+        { error: 'Too many requests. Please wait before uploading again.', retryAfter: rateLimit.retryAfter },
+        { status: 429, headers: rateLimitHeaders(rateLimit) }
+      );
+    }
+    console.log(`✅ Rate limit OK: ${rateLimit.remaining} requests remaining`);
 
     // 2. Check credit limits
     console.log('\n💳 Step 2: Credit Check');

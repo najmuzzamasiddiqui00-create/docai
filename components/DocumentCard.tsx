@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -20,14 +20,56 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [newName, setNewName] = useState(document.file_name);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [localStatus, setLocalStatus] = useState(document.status);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Get base URL for API calls
+  const getBaseUrl = () => {
+    return typeof window !== 'undefined' 
+      ? window.location.origin 
+      : (process.env.NEXT_PUBLIC_APP_URL || '');
+  };
+
+  // Poll for status updates when processing
+  useEffect(() => {
+    if (document.status === 'processing' || document.status === 'queued') {
+      pollingRef.current = setInterval(async () => {
+        try {
+          const response = await fetch(`${getBaseUrl()}/api/documents/${document.id}`, {
+            cache: 'no-store',
+          });
+          const data = await response.json();
+          if (data.document && data.document.status !== localStatus) {
+            setLocalStatus(data.document.status);
+            if (data.document.status === 'completed' || data.document.status === 'failed') {
+              if (pollingRef.current) clearInterval(pollingRef.current);
+              onUpdate(); // Refresh parent list
+            }
+          }
+        } catch (error) {
+          console.error('Polling error:', error);
+        }
+      }, 3000);
+    }
+    
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [document.id, document.status, localStatus, onUpdate]);
+
+  // Update local status when prop changes
+  useEffect(() => {
+    setLocalStatus(document.status);
+  }, [document.status]);
 
   const handleDownload = async () => {
     try {
       setIsProcessing(true);
-      const response = await fetch('/api/documents/download', {
+      const response = await fetch(`${getBaseUrl()}/api/documents/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: document.id }),
+        cache: 'no-store',
       });
 
       if (response.ok) {
@@ -54,10 +96,11 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
 
     try {
       setIsProcessing(true);
-      const response = await fetch('/api/documents/rename', {
+      const response = await fetch(`${getBaseUrl()}/api/documents/rename`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: document.id, newName: newName.trim() }),
+        cache: 'no-store',
       });
 
       if (response.ok) {
@@ -78,8 +121,9 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
   const handleDelete = async () => {
     try {
       setIsProcessing(true);
-      const response = await fetch(`/api/documents/${document.id}`, {
+      const response = await fetch(`${getBaseUrl()}/api/documents/${document.id}`, {
         method: 'DELETE',
+        cache: 'no-store',
       });
 
       if (response.ok) {
@@ -100,10 +144,11 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
   const handleRetry = async () => {
     try {
       setIsProcessing(true);
-      const response = await fetch('/api/documents/retry', {
+      const response = await fetch(`${getBaseUrl()}/api/documents/retry`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documentId: document.id }),
+        cache: 'no-store',
       });
 
       if (response.ok) {
@@ -121,8 +166,19 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
     }
   };
 
-  // Safe analysis accessor
-  const analysis = (document as any).processed_output || {};
+  // Safe analysis accessor - parse if string
+  let analysis: any = {};
+  if ((document as any).processed_output) {
+    if (typeof (document as any).processed_output === 'string') {
+      try {
+        analysis = JSON.parse((document as any).processed_output);
+      } catch {
+        analysis = {};
+      }
+    } else {
+      analysis = (document as any).processed_output;
+    }
+  }
 
   return (
     <>
@@ -212,15 +268,18 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
 
           {/* Status & Info */}
           <div className="flex items-center gap-3 mb-4">
-            <StatusBadge status={document.status} />
+            <StatusBadge status={localStatus} />
             <span className="text-sm text-gray-600">{document.file_type}</span>
             <span className="text-sm text-gray-600">
               {(document.file_size / 1024).toFixed(2)} KB
             </span>
+            {(localStatus === 'processing' || localStatus === 'queued') && (
+              <span className="text-xs text-blue-600 animate-pulse">⏱️ Auto-updating...</span>
+            )}
           </div>
 
           {/* Analysis Preview */}
-          {document.status === 'completed' && (
+          {localStatus === 'completed' && (
             <div className="space-y-3">
               {analysis.summary && (
                 <p className="text-sm text-gray-700 line-clamp-3">
@@ -269,10 +328,18 @@ export default function DocumentCard({ document, onUpdate }: DocumentCardProps) 
             </div>
           )}
 
-          {document.status === 'failed' && document.error && (
+          {localStatus === 'failed' && document.error && (
             <p className="text-sm text-red-600">
               Error: {document.error}
             </p>
+          )}
+          
+          {/* Processing indicator */}
+          {(localStatus === 'processing' || localStatus === 'queued') && (
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+              <span>{localStatus === 'processing' ? 'Processing...' : 'Queued...'}</span>
+            </div>
           )}
 
           {/* Actions */}
