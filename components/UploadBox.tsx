@@ -112,7 +112,10 @@ export default function UploadBox({
         if (errorData.error === 'LIMIT_REACHED' || errorData.requiresSubscription) {
           throw new Error('CREDIT_LIMIT');
         }
-        throw new Error(errorData.error || errorData.message || 'Upload failed');
+        
+        // Show detailed server error message if available
+        const serverError = errorData.document?.error || errorData.error || errorData.message || 'Upload failed';
+        throw new Error(serverError);
       }
 
       const uploadData = await uploadResponse.json();
@@ -120,6 +123,12 @@ export default function UploadBox({
       console.log('   Response keys:', Object.keys(uploadData));
       console.log('   documentId:', uploadData.documentId);
       console.log('   document:', uploadData.document);
+
+      // Check if upload was successful but webhook failed
+      if (uploadData.success === false && uploadData.document?.status === 'failed') {
+        console.error('❌ Upload succeeded but processing queue failed');
+        throw new Error(uploadData.document.error || 'Failed to queue document for processing');
+      }
 
       if (!uploadData.documentId && !uploadData.document?.id) {
         console.error('❌ No documentId in response:', uploadData);
@@ -205,7 +214,7 @@ export default function UploadBox({
 
   const pollDocumentStatus = async (documentId: string) => {
     let attempts = 0;
-    const maxAttempts = 150; // 5 minutes max (150 * 2s)
+    const maxAttempts = 60; // 2 minutes max (60 * 2s)
     
     console.log('\n🔄 === STARTING DOCUMENT STATUS POLLING ===');
     console.log(`   Document ID: ${documentId}`);

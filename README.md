@@ -83,10 +83,32 @@ NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_...
 # Google Gemini AI
 GEMINI_API_KEY=AIza...
 
+# N8N Webhook (Optional - for external processing)
+N8N_WEBHOOK_URL=https://your-n8n.app/webhook/document-process
+N8N_WEBHOOK_SECRET=your-n8n-secret  # Optional security
+
 # App Configuration
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 WEBHOOK_SECRET=your-webhook-secret
 ```
+
+### N8N Integration (Optional)
+
+If you want to use N8N for document processing instead of the built-in processor:
+
+1. Set `N8N_WEBHOOK_URL` to your N8N webhook trigger URL
+2. Optionally set `N8N_WEBHOOK_SECRET` for security
+3. The upload API will POST to N8N with: `{ documentId, fileUrl, userId, fileName, fileType }`
+4. N8N should call back to `/api/webhooks/n8n` with the processing result:
+   ```json
+   {
+     "documentId": "uuid",
+     "status": "completed",
+     "processed_output": { "summary": "...", "keyPoints": [...], "keywords": [...] }
+   }
+   ```
+
+If `N8N_WEBHOOK_URL` is not set, the app uses the built-in `/api/process-document` route.
 
 5. **Set up Supabase Database**:
 
