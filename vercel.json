@@ -3,9 +3,6 @@
   "functions": {
     "app/api/**/*.ts": {
       "maxDuration": 60
-    },
-    "middleware.ts": {
-      "regions": ["iad1"]
     }
   },
   "headers": [
