@@ -1,20 +1,35 @@
 /**
  * AI Analysis Module
  * 
- * Primary: Gemini API (gemini-2.5-pro)
- * Fallback: OpenAI API (gpt-4o or gpt-3.5-turbo)
+ * Primary: AI SDK 6 with Gemini (gemini-2.0-flash)
+ * Fallback: AI SDK 6 with OpenAI (gpt-4o)
+ * Legacy: Direct REST API calls (deprecated)
  * 
  * Features:
+ * - AI SDK 6 generateText with tool-based analysis
+ * - Streaming support via streamText
+ * - Automatic provider fallback (Gemini → OpenAI)
  * - Retry with exponential backoff on 429/5xx errors
  * - Robust JSON parsing (strips markdown code fences)
  * - Safe fallback object on parse failures
  * - Truncated text storage (max 5000 chars)
  * 
  * ZERO top-level initialization - all clients created at request time
+ * 
+ * @see https://sdk.vercel.ai/docs for AI SDK documentation
  */
 
 import { isBuildPhase } from './supabase';
 import { createRequestLogger } from './logger';
+
+// Try to import AI SDK - falls back to legacy if not available
+let useAISDK = false;
+try {
+  require('ai');
+  useAISDK = true;
+} catch {
+  // AI SDK not installed, use legacy implementation
+}
 
 // ============================================================================
 // TYPES
@@ -448,3 +463,14 @@ export const analyzeDocument = analyzeText;
 export const analyzeTextWithGemini = analyzeText;
 
 export type GeminiAnalysisResult = ProcessedOutput;
+
+// ============================================================================
+// AI SDK 6 INTEGRATION
+// ============================================================================
+
+/**
+ * Re-export AI SDK functions for convenience
+ * Use these for streaming chat and advanced features
+ */
+export { analyzeTextWithSDK, streamAnalysis } from './ai-sdk';
+
